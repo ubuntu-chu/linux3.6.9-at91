@@ -1,0 +1,91 @@
+/*
+ * sama5d35ek.dts - Device Tree file for SAMA5-EK board
+ *
+ *  Copyright (C) 2012 Atmel,
+ *                2012 Ludovic Desroches <ludovic.desroches@atmel.com>
+ *
+ * Licensed under GPLv2 or later.
+ */
+/dts-v1/;
+/include/ "sama5d3mb.dtsi"
+
+/ {
+	model = "Atmel SAMA5D35-EK";
+	compatible = "atmel,sama5d35ek", "atmel,sama5ek", "atmel,sama5d3", "atmel,sama5";
+
+	chosen {
+		bootargs = "console=ttyS0,115200 mtdparts=atmel_nand:8M(bootstrap/uboot/kernel)ro,-(rootfs) rw rootfstype=ubifs ubi.mtd=1 root=ubi0:rootfs";
+	};
+
+	ahb {
+		apb {
+			spi0: spi@f0004000 {
+				status = "okay";
+			};
+
+			can1: can@f8010000 {
+				status = "okay";
+			};
+
+			macb0: ethernet@f0028000 {
+				status = "okay";
+			};
+
+			macb1: ethernet@f802c000 {
+				status = "okay";
+			};
+			
+			uart0: serial@f0024000 {
+				status = "okay";
+			};
+			
+			uart1: serial@f8028000 {
+				status = "okay";
+			};
+			
+			usart0: serial@f001c000 {
+				pinctrl-names = "default";
+				pinctrl-0 = <&pinctrl_usart0 &pinctrl_usart0_rts_cts>;
+				linux,rs485-enabled-at-boot-time;
+				rs485-rts-delay = <0 0>;
+				status = "okay";
+			};
+			
+			usart2: serial@f8020000 {
+				pinctrl-names = "default";
+				pinctrl-0 = <&pinctrl_usart2 &pinctrl_usart2_rts_cts>;
+				status = "okay";
+			};
+			
+			usart3: serial@f8024000 {
+				pinctrl-names = "default";
+				pinctrl-0 = <&pinctrl_usart3 &pinctrl_usart3_rts_cts>;
+				status = "okay";
+			};
+		};
+	};
+	
+	sound {
+		status = "okay";
+	};
+
+	gpio_keys {
+		compatible = "gpio-keys";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		pb_user1 {
+			label = "pb_user1";
+			gpios = <&pioE 0 0>;
+			linux,code = <0x100>;
+			gpio-key,wakeup;
+		};
+		
+		pb_user2 {
+			label = "pb_user2";
+			gpios = <&pioE 1 0>;
+			linux,code = <0x101>;
+			gpio-key,wakeup;
+		};
+	};
+};

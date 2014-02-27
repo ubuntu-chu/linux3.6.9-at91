@@ -1,0 +1,82 @@
+/*
+ * at91sam9g25ek.dts - Device Tree file for AT91SAM9G25-EK board
+ *
+ *  Copyright (C) 2012 Atmel,
+ *                2012 Nicolas Ferre <nicolas.ferre@atmel.com>
+ *
+ * Licensed under GPLv2 or later.
+ */
+/dts-v1/;
+/include/ "at91sam9g25.dtsi"
+/include/ "at91sam9x5ek.dtsi"
+
+/ {
+	model = "Atmel AT91SAM9G25-EK";
+	compatible = "atmel,at91sam9g25ek", "atmel,at91sam9x5ek", "atmel,at91sam9x5", "atmel,at91sam9";
+
+	ahb {
+		apb {
+			spi0: spi@f0000000 {
+				status = "okay";
+			};
+
+			macb0: ethernet@f802c000 {
+				status = "okay";
+			};
+
+			watchdog@fffffe40 {
+				status = "okay";
+			};
+
+			usart0: serial@f801c000 {
+				pinctrl-0 = <&pinctrl_usart0 &pinctrl_usart0_rts_cts>;
+				linux,rs485-enabled-at-boot-time;
+				rs485-rts-delay = <0 0>;
+				status = "okay";
+			};
+			
+			usart1: serial@f8020000 {
+				pinctrl-0 = <&pinctrl_usart1 &pinctrl_usart1_rts_cts>;
+				status = "okay";
+			};
+
+			usart2: serial@f8024000 {
+				status = "okay";
+			};
+
+			usart3: serial@f8028000 {
+				pinctrl-0 = <&pinctrl_usart3 &pinctrl_usart3_rts_cts>;
+				linux,rs485-enabled-at-boot-time;
+				rs485-rts-delay = <0 0>;
+				atmel,use-dma-rx;
+				dma-rx = <&dma1 0x2000020f>;
+				atmel,use-dma-tx;
+				dma-tx = <&dma1 0x100020e0>;
+				status = "okay";
+			};
+
+			uart0: serial@f8040000 {
+				status = "okay";
+			};
+
+			uart1: serial@f8044000 {
+				status = "okay";
+			};
+
+			rtc@fffffeb0 {
+				status = "okay";
+			};
+		};
+	};
+/*
+*	pt2262: pt2262@0 {
+*		compatible = "atmel,at91sam9x5-pt2262";
+*		gpios = <&pioA 25 0>;
+*				pt2262-gpio,delay-us = <0x05>;
+*				pt2262-gpio,slave-addr = <0x05>;
+*				#address-cells = <1>;
+*				#size-cells = <0>;
+*				status = "okay";
+*	};
+*/
+};
