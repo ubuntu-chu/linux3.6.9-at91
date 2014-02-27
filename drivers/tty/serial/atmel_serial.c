@@ -22,6 +22,26 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
  */
+#define    P_DEBUG_SWITCH        (1)
+ 
+#if    (P_DEBUG_SWITCH > 0)
+    #define P_DEBUG_DEV(dev, fmt, args...)   printk("<1>" "<kernel>[%s %s %s(%d):%s]"fmt,\
+			                        dev_driver_string(dev), \
+			                        dev_name(dev), __FILE__, __LINE__,__FUNCTION__, ##args)
+    #define P_DEBUG(fmt, args...)   printk("<0>" "<kernel>[%s(%d):%s]"fmt, __FILE__, __LINE__, \
+			                        __FUNCTION__, ##args)
+    #define P_DEBUG_SIMPLE(fmt, args...)   printk("<0>" "<kernel>[%s]"fmt,  \
+			__FUNCTION__, ##args)
+#else
+    #define P_DEBUG_DEV(dev, fmt, args...)
+    #define P_DEBUG(fmt, args...)
+	#define P_DEBUG_SIMPLE(fmt, args...)
+#endif
+
+//#define DEBUG  1
+#include <linux/device.h>
+#undef DEBUG
+
 #include <linux/module.h>
 #include <linux/tty.h>
 #include <linux/ioport.h>
@@ -453,6 +473,8 @@ void atmel_config_rs485(struct uart_port *port, struct serial_rs485 *rs485conf)
 	unsigned int mode;
 	unsigned long flags;
 
+	P_DEBUG_SIMPLE("enter\n");
+
 	spin_lock_irqsave(&port->lock, flags);
 
 	/* Disable interrupts */
@@ -467,11 +489,13 @@ void atmel_config_rs485(struct uart_port *port, struct serial_rs485 *rs485conf)
 
 	if (rs485conf->flags & SER_RS485_ENABLED) {
 		dev_dbg(port->dev, "Setting UART to RS485\n");
+		P_DEBUG_DEV(port->dev, "Setting UART to RS485\n");
 		atmel_port->tx_done_mask = ATMEL_US_TXEMPTY;
 		if ((rs485conf->delay_rts_after_send) > 0)
 			UART_PUT_TTGR(port, rs485conf->delay_rts_after_send);
 		mode |= ATMEL_US_USMODE_RS485;
 	} else {
+		P_DEBUG_DEV(port->dev, "Setting UART to RS232\n");
 		dev_dbg(port->dev, "Setting UART to RS232\n");
 		if (atmel_use_pdc_tx(port))
 			atmel_port->tx_done_mask = ATMEL_US_ENDTX |
@@ -485,6 +509,7 @@ void atmel_config_rs485(struct uart_port *port, struct serial_rs485 *rs485conf)
 	UART_PUT_IER(port, atmel_port->tx_done_mask);
 
 	spin_unlock_irqrestore(&port->lock, flags);
+	P_DEBUG_SIMPLE("exit\n");
 
 }
 
@@ -616,6 +641,7 @@ static void atmel_start_tx(struct uart_port *port)
 
 		/* re-enable PDC transmit */
 		UART_PUT_PTCR(port, ATMEL_PDC_TXTEN);
+		P_DEBUG_DEV(port->dev, "using pdc");
 	}
 	/* Enable interrupts */
 	UART_PUT_IER(port, atmel_port->tx_done_mask);
@@ -2210,8 +2236,10 @@ static void __devinit atmel_of_init_port(struct atmel_uart_port *atmel_port,
 		if (of_get_property(np, "rs485-rx-during-tx", NULL))
 			rs485conf->flags |= SER_RS485_RX_DURING_TX;
 
-		if (of_get_property(np, "linux,rs485-enabled-at-boot-time", NULL))
+		if (of_get_property(np, "linux,rs485-enabled-at-boot-time", NULL)){
+			P_DEBUG_SIMPLE("rs484 enable at boot -time\n");
 			rs485conf->flags |= SER_RS485_ENABLED;
+		}
 	}
 }
 
@@ -2620,7 +2648,9 @@ static int __devinit atmel_serial_probe(struct platform_device *pdev)
 		port->rx_ring.buf = data;
 	}
 
+	P_DEBUG_SIMPLE("uart_add_one_port\n");
 	ret = uart_add_one_port(&atmel_uart, &port->uart);
+	P_DEBUG_SIMPLE("uart_add_one_port end\n");
 	if (ret)
 		goto err_add_port;
 
@@ -2641,6 +2671,7 @@ static int __devinit atmel_serial_probe(struct platform_device *pdev)
 	if (port->rs485.flags & SER_RS485_ENABLED) {
 		UART_PUT_MR(&port->uart, ATMEL_US_USMODE_NORMAL);
 		UART_PUT_CR(&port->uart, ATMEL_US_RTSEN);
+		P_DEBUG_DEV(port->uart.dev, "probe \n");
 	}
 
 	/*
