@@ -573,8 +573,11 @@ static void atmel_set_mctrl(struct uart_port *port, u_int mctrl)
 			UART_PUT_TTGR(port,
 					atmel_port->rs485.delay_rts_after_send);
 		mode |= ATMEL_US_USMODE_RS485;
+		P_DEBUG_DEV(port->dev, "Setting UART to RS485\n");
 	} else {
 		dev_dbg(port->dev, "Setting UART to RS232\n");
+	//	P_DEBUG_DEV(port->dev, "Setting UART to RS232\n");
+		
 	}
 	UART_PUT_MR(port, mode);
 }
@@ -806,6 +809,7 @@ static void atmel_tx_chars(struct uart_port *port)
 	struct circ_buf *xmit = &port->state->xmit;
 	struct atmel_uart_port *atmel_port = to_atmel_uart_port(port);
 
+	P_DEBUG();
 	if (port->x_char && UART_GET_CSR(port) & atmel_port->tx_done_mask) {
 		UART_PUT_CHAR(port, port->x_char);
 		port->icount.tx++;
@@ -936,6 +940,7 @@ static void atmel_tx_dma(struct uart_port *port)
 		if (atmel_port->rs485.flags & SER_RS485_ENABLED) {
 			/* DMA done, stop TX, start RX for RS485 */
 			atmel_start_rx(port);
+			P_DEBUG("atmel start rx\n");
 		}
 	}
 
@@ -2012,8 +2017,10 @@ static void atmel_set_termios(struct uart_port *port, struct ktermios *termios,
 			UART_PUT_TTGR(port,
 					atmel_port->rs485.delay_rts_after_send);
 		mode |= ATMEL_US_USMODE_RS485;
+		P_DEBUG_DEV(port->dev, "Setting UART to RS485\n");
 	} else {
 		dev_dbg(port->dev, "Setting UART to RS232\n");
+		//P_DEBUG_DEV(port->dev, "Setting UART to RS232\n");
 	}
 
 	/* set the parity, stop bits and data size */
