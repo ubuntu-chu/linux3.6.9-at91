@@ -22,7 +22,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
  */
-#define    P_DEBUG_SWITCH        (1)
+#define    P_DEBUG_SWITCH        (0)
  
 #if    (P_DEBUG_SWITCH > 0)
     #define P_DEBUG_DEV(dev, fmt, args...)   printk("<1>" "<kernel>[%s %s %s(%d):%s]"fmt,\
@@ -32,11 +32,23 @@
 			                        __FUNCTION__, ##args)
     #define P_DEBUG_SIMPLE(fmt, args...)   printk("<0>" "<kernel>[%s]"fmt,  \
 			__FUNCTION__, ##args)
+
+	#define P_DEBUG_PORT(port, fmt, args...)    do{ if (port->line > 1){\
+				printk("<1>" "<kernel>[%s(%d):%s]"fmt, __FILE__, __LINE__, \
+						__FUNCTION__, ##args);}\
+				}while(0)
 #else
     #define P_DEBUG_DEV(dev, fmt, args...)
     #define P_DEBUG(fmt, args...)
 	#define P_DEBUG_SIMPLE(fmt, args...)
+	#define P_DEBUG_PORT(port, fmt, args...)    
 #endif
+
+#define SER_RS485_RTS_SPECIAL		(1 << 16)
+enum{
+	RS485_STATUS_SEND	= 0,
+	RS485_STATUS_RECV,
+};
 
 //#define DEBUG  1
 #include <linux/device.h>
@@ -55,6 +67,8 @@
 #include <linux/platform_device.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
+#include <linux/of_platform.h>
+#include <linux/of_gpio.h>
 #include <linux/dma-mapping.h>
 #include <linux/atmel_pdc.h>
 #include <linux/atmel_serial.h>
@@ -194,6 +208,8 @@ struct atmel_uart_port {
 	struct circ_buf		rx_ring;
 
 	struct serial_rs485	rs485;		/* rs485 settings */
+	unsigned int		rs485_rts_pin;
+	u8					rs485_rts_name[50];
 	unsigned int		tx_done_mask;
 	bool			is_usart;       /* usart or uart */
 	struct timer_list       uart_timer;     /* uart timer */
@@ -240,6 +256,28 @@ static const struct of_device_id atmel_serial_dt_ids[] = {
 };
 
 MODULE_DEVICE_TABLE(of, atmel_serial_dt_ids);
+
+static void atmel_rs485_special_status(struct atmel_uart_port *port, u8 is_send, const char*function_str){
+
+	struct serial_rs485 *rs485conf = &port->rs485;
+
+	if (rs485conf->flags & SER_RS485_RTS_SPECIAL){
+
+		int	value	= (RS485_STATUS_SEND == is_send)?(1):(0);
+		unsigned int status;
+		struct uart_port *u_port	= &port->uart;
+
+#if P_DEBUG_SWITCH > 0
+		P_DEBUG("****called by %s\n", function_str);
+#endif
+		do{
+			status = UART_GET_CSR(u_port);
+		}while (!(status & ATMEL_US_TXEMPTY));
+		P_DEBUG("****rs485 setting:%s  pin=%d value=%d\n", (RS485_STATUS_SEND==is_send)?("tx"):("rx"), port->rs485_rts_pin, value);
+		/* Set RS485 mode, add by chuM */
+		gpio_set_value_cansleep(port->rs485_rts_pin, value);
+	}
+}
 
 static int atmel_uart_rx_dma_of_init(struct device_node *np,
 					struct at_dma_slave *atslave)
@@ -648,6 +686,12 @@ static void atmel_start_tx(struct uart_port *port)
 	}
 	/* Enable interrupts */
 	UART_PUT_IER(port, atmel_port->tx_done_mask);
+#if P_DEBUG_SWITCH > 0
+
+	printk("\n\n\n");
+#endif
+	P_DEBUG("\n");
+	atmel_rs485_special_status(atmel_port, RS485_STATUS_SEND, __FUNCTION__);
 }
 
 /*
@@ -834,6 +878,7 @@ static void atmel_tx_chars(struct uart_port *port)
 		UART_PUT_IER(port, atmel_port->tx_done_mask);
 }
 
+
 static void atmel_dma_tx_complete(void *arg)
 {
 	struct atmel_uart_port *atmel_port = arg;
@@ -857,12 +902,19 @@ static void atmel_dma_tx_complete(void *arg)
 	atmel_port->desc_tx = NULL;
 	spin_unlock_irq(&atmel_port->lock_tx);
 
-	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
+	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS){
 		uart_write_wakeup(port);
+		P_DEBUG("uart_write_wakeup -- complete\n");
+	}
 
 	/* Do we really need this? */
-	if (!uart_circ_empty(xmit))
+	if (!uart_circ_empty(xmit)){
 		tasklet_schedule(&atmel_port->tasklet);
+		P_DEBUG("tasklet_schedule call\n");
+	}else{
+		P_DEBUG("uart circ empty dma tx complete++\n");
+		atmel_rs485_special_status(atmel_port, RS485_STATUS_RECV, __FUNCTION__);
+	}
 
 	spin_unlock_irqrestore(&port->lock, flags);
 }
@@ -895,6 +947,7 @@ static void atmel_tx_dma(struct uart_port *port)
 	struct dma_async_tx_descriptor *desc;
 	struct scatterlist *sg = &atmel_port->sg_tx;
 
+	P_DEBUG("enter\n");
 	/* Make sure we have an idle channel */
 	if (atmel_port->desc_tx != NULL)
 		return;
@@ -926,6 +979,7 @@ static void atmel_tx_dma(struct uart_port *port)
 						DMA_CTRL_ACK);
 		if (!desc) {
 			dev_err(port->dev, "Failed to send via dma!\n");
+			P_DEBUG("Failed to send via dma!\n");
 			return;
 		}
 
@@ -935,17 +989,21 @@ static void atmel_tx_dma(struct uart_port *port)
 		desc->callback = atmel_dma_tx_complete;
 		desc->callback_param = atmel_port;
 		atmel_port->cookie_tx = dmaengine_submit(desc);
+		P_DEBUG("submit to dam engine\n");
 
 	} else {
 		if (atmel_port->rs485.flags & SER_RS485_ENABLED) {
 			/* DMA done, stop TX, start RX for RS485 */
 			atmel_start_rx(port);
-			P_DEBUG("atmel start rx\n");
+			atmel_rs485_special_status(atmel_port, RS485_STATUS_RECV, __FUNCTION__);
 		}
 	}
 
-	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
+	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS){
 		uart_write_wakeup(port);
+		P_DEBUG("uart_write_wakeup\n");
+	}
+	P_DEBUG("exit\n");
 }
 
 static bool filter(struct dma_chan *chan, void *slave)
@@ -1323,9 +1381,11 @@ atmel_handle_transmit(struct uart_port *port, unsigned int pending)
 	struct atmel_uart_port *atmel_port = to_atmel_uart_port(port);
 
 	if (pending & atmel_port->tx_done_mask) {
+		P_DEBUG("enter\n");
 		/* Either PDC or interrupt transmission */
 		UART_PUT_IDR(port, atmel_port->tx_done_mask);
 		tasklet_schedule(&atmel_port->tasklet);
+		P_DEBUG("exit\n");
 	}
 }
 
@@ -1573,6 +1633,7 @@ static void atmel_tasklet_func(unsigned long data)
 	unsigned int status;
 	unsigned int status_change;
 
+	P_DEBUG("enter\n");
 	/* The interrupt handler does not take the lock */
 	spin_lock(&port->lock);
 
@@ -1611,6 +1672,7 @@ static void atmel_tasklet_func(unsigned long data)
 		atmel_rx_from_ring(port);
 
 	spin_unlock(&port->lock);
+	P_DEBUG("exit\n");
 }
 
 /*
@@ -1784,6 +1846,7 @@ static int atmel_startup(struct uart_port *port)
 		/* enable receive only */
 		UART_PUT_IER(port, ATMEL_US_RXRDY);
 	}
+	atmel_rs485_special_status(atmel_port, RS485_STATUS_RECV, __FUNCTION__);
 
 	return 0;
 }
@@ -1799,6 +1862,7 @@ static void atmel_shutdown(struct uart_port *port)
 	 */
 	atmel_stop_rx(port);
 	atmel_stop_tx(port);
+	atmel_rs485_special_status(atmel_port, RS485_STATUS_RECV, __FUNCTION__);
 
 	/*
 	 * Shut-down the DMA.
@@ -2247,6 +2311,71 @@ static void __devinit atmel_of_init_port(struct atmel_uart_port *atmel_port,
 			P_DEBUG_SIMPLE("rs484 enable at boot -time\n");
 			rs485conf->flags |= SER_RS485_ENABLED;
 		}
+		if (of_get_property(np, "linux,rs485-special", NULL)){
+//			phandle		handle;
+//			u32			pinctrl_array[2];
+//			struct device_node *dv;
+			int			error;
+			enum of_gpio_flags flags;
+
+			P_DEBUG_SIMPLE("rs484 special enable at boot -time\n");
+			rs485conf->flags |= SER_RS485_ENABLED;
+			rs485conf->flags |= SER_RS485_RTS_SPECIAL;
+
+			atmel_port->rs485_rts_pin = of_get_gpio_flags(np, 0, &flags);
+			if (atmel_port->rs485_rts_pin < 0){
+				printk("<0>""read gpios property failed\n");
+			}
+#if 0
+			memset(pinctrl_array, 0, sizeof(pinctrl_array));
+			if (!of_property_read_u32_array(np, "pinctrl-0", pinctrl_array, 2)){
+				printk("<0>""%d %d\n", pinctrl_array[0], pinctrl_array[1]);
+				dv = of_find_node_by_phandlez(pinctrl_array[1]);
+				if (dv){
+					printk("<0>""of_find_node_by_phandlez ok\n");
+				}else {
+					printk("<0>""of_find_node_by_phandlez failed\n");
+				}
+			}else {
+				printk("<0>""read pinctrl-0 failed\n");
+			}
+#endif
+#if 0
+			if (atmel_port->uart.line == 2){
+//				atmel_port->rs485_rts_pin	= AT91_PIN_PA3;
+			}else if (atmel_port->uart.line == 3){
+				atmel_port->rs485_rts_pin	= AT91_PIN_PA4;
+			}else if (atmel_port->uart.line == 5){
+				atmel_port->rs485_rts_pin	= AT91_PIN_PC10;
+			}else if (atmel_port->uart.line == 6){
+				atmel_port->rs485_rts_pin	= AT91_PIN_PC15;
+			} 
+#endif
+			sprintf(atmel_port->rs485_rts_name, ATMEL_DEVICENAME"%d-rts", atmel_port->uart.line);
+			error = gpio_request(atmel_port->rs485_rts_pin, atmel_port->rs485_rts_name);
+			if (error < 0) {
+				printk("Failed to request GPIO %d, error %d\n",
+					atmel_port->rs485_rts_pin, error);
+				return;
+			}
+#if 0
+			//unused in pinctrl   
+//			error = at91_set_GPIO_periph(atmel_port->rs485_rts_pin, 0);
+			if (error < 0) {
+				printk( "Failed to configure GPIO %d as gpio, error %d\n",
+					atmel_port->rs485_rts_pin, error);
+				return;
+			}
+#endif
+			error = gpio_direction_output(atmel_port->rs485_rts_pin, 0);
+			if (error < 0) {
+				printk( "Failed to configure direction for GPIO %d, error %d\n",
+					atmel_port->rs485_rts_pin, error);
+				return;
+			}
+			P_DEBUG_SIMPLE("ttySAC%d 485_rts_pin=%d\n", atmel_port->uart.line, atmel_port->rs485_rts_pin);
+
+		}
 	}
 }
 
@@ -2655,9 +2784,7 @@ static int __devinit atmel_serial_probe(struct platform_device *pdev)
 		port->rx_ring.buf = data;
 	}
 
-	P_DEBUG_SIMPLE("uart_add_one_port\n");
 	ret = uart_add_one_port(&atmel_uart, &port->uart);
-	P_DEBUG_SIMPLE("uart_add_one_port end\n");
 	if (ret)
 		goto err_add_port;
 
@@ -2678,7 +2805,6 @@ static int __devinit atmel_serial_probe(struct platform_device *pdev)
 	if (port->rs485.flags & SER_RS485_ENABLED) {
 		UART_PUT_MR(&port->uart, ATMEL_US_USMODE_NORMAL);
 		UART_PUT_CR(&port->uart, ATMEL_US_RTSEN);
-		P_DEBUG_DEV(port->uart.dev, "probe \n");
 	}
 
 	/*

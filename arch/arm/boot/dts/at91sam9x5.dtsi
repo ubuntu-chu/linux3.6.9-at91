@@ -566,7 +566,7 @@
 
 					pinctrl_usart0_rts_cts: usart0_rts_cts-0 {
 						atmel,pins =
-							<0 2 0x1 0x0>;	/* RTS PA2 periph A */
+							<0 2 0x1 0x0>;	/* RTS PA2 periph A  rs485 only need rts*/
 					};
 				};
 
@@ -579,8 +579,9 @@
 
 					pinctrl_usart1_rts_cts: usart1_rts_cts-0 {
 						atmel,pins =
-							<2 27 0x3 0x0	/* PC27 periph C */
-							 2 28 0x3 0x0>;	/* PC28 periph C */
+							<0 3 0x0 0x0>;  /*RTS PA3 for board*/
+							/*<2 27 0x3 0x0	*//* PC27 periph C */
+							/* 2 28 0x3 0x0>;	*//* PC28 periph C */
 					};
 				};
 
@@ -593,8 +594,9 @@
 
 					pinctrl_usart2_rts_cts: usart2_rts_cts-0 {
 						atmel,pins =
-							<1 0 0x2 0x0	/* PB0 periph B */
-							 1 1 0x2 0x0>;	/* PB1 periph B */
+							<0 4 0x0 0x0>;  /*RTS PA4 for board*/
+							/*<1 0 0x2 0x0*/	/* PB0 periph B */
+							/* 1 1 0x2 0x0>;*//* PB1 periph B */
 					};
 				};
 

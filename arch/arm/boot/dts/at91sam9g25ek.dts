@@ -36,13 +36,18 @@
 			};
 			
 			usart1: serial@f8020000 {
-				pinctrl-0 = <&pinctrl_usart1 &pinctrl_usart1_rts_cts>;
-				linux,rs485-enabled-at-boot-time;
+				pinctrl-0 = <&pinctrl_usart1>;
+				linux,rs485-special;
 				rs485-rts-delay = <0 0>;
+				gpios = <&pioA 3 0>;
 				status = "okay";
 			};
 
 			usart2: serial@f8024000 {
+				pinctrl-0 = <&pinctrl_usart2>;
+				linux,rs485-special;
+				rs485-rts-delay = <0 0>;
+				gpios = <&pioA 4 0>;
 				status = "okay";
 			};
 
@@ -58,10 +63,16 @@
 			};
 
 			uart0: serial@f8040000 {
+				linux,rs485-special;
+				rs485-rts-delay = <0 0>;
+				gpios = <&pioC 10 0>;
 				status = "okay";
 			};
 
 			uart1: serial@f8044000 {
+				linux,rs485-special;
+				rs485-rts-delay = <0 0>;
+				gpios = <&pioC 15 0>;
 				status = "okay";
 			};
 
