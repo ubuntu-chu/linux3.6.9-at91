@@ -78,10 +78,12 @@
 				pinctrl-0 = <&pinctrl_usart3 &pinctrl_usart3_rts_cts>;
 				linux,rs485-enabled-at-boot-time;
 				rs485-rts-delay = <0 0>;
+				/*
 				atmel,use-dma-rx;
 				dma-rx = <&dma1 0x2000020f>;
 				atmel,use-dma-tx;
 				dma-tx = <&dma1 0x100020e0>;
+				*/
 				status = "okay";
 			};
 

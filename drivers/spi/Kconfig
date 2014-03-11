@@ -208,6 +208,12 @@ config SPI_MPC512x_PSC
 	  This enables using the Freescale MPC5121 Programmable Serial
 	  Controller in SPI master mode.
 
+config SPI_ST7735S
+	tristate "ST7735S Based SPI LCD Driver"
+	depends on GENERIC_GPIO
+	help
+	  st7735s tft lcd driver
+
 config SPI_FSL_LIB
 	tristate
 	depends on FSL_SOC

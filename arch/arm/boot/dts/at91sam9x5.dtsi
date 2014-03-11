@@ -186,10 +186,12 @@
 				compatible = "atmel,at91sam9x5-usart";
 				reg = <0xf801c000 0x200>;
 				interrupts = <5 4 5>;
+				/*
 				atmel,use-dma-rx;
 				dma-rx = <&dma0 0x20000204>;
 				atmel,use-dma-tx;
 				dma-tx = <&dma0 0x10002030>;
+				*/
 				pinctrl-names = "default";
 				pinctrl-0 = <&pinctrl_usart0>;
 				status = "disabled";
