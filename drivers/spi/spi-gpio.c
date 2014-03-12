@@ -317,7 +317,7 @@ static int __devinit spi_gpio_probe(struct platform_device *pdev)
 {
 	int				status;
 	struct spi_master		*master;
-	struct spi_gpio			*spi_gpio;
+	struct spi_gpio			*spi_gpio;spi_gpio_probe
 	struct spi_gpio_platform_data	*pdata;
 	u16 master_flags = 0;
 

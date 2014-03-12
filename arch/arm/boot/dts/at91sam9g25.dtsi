@@ -46,10 +46,23 @@
 			spi0: spi@f0000000 {
 				status = "okay";        
 
+				/*
 				device@0 {          
 					compatible = "spidev";          // spi-max-frequency = <50000000>;  // 50 MHz    
 					spi-max-frequency = <5000000>;	    // 5 MHz          
 					reg = <0>;        
+				};
+				*/
+				st7735_lcd{
+					compatible = "st7735";          
+
+					spi-max-frequency = <30000000>;		// 30 MHz    
+					reg = <0>;        
+					backlight-gpios = <&pioB 11 0>;
+					cd-gpios = <&pioB 12 0>;
+					rst-gpios = <&pioB 13 0>;
+					spi-cpha;
+					spi-cpol;
 				};
 			};
 		};

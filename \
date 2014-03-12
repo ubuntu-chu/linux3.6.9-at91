@@ -1,0 +1,248 @@
+/**
+ * drivers/serial/st7735.c
+ *
+ * Copyright (C) 2009 Manuel Stahl <manuel.stahl@iis.fraunhofer.de>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * The st7735 device is a SPI driven dual UART with GPIOs.
+ *
+ * The driver exports two uarts and a gpiochip interface.
+ */
+
+/* #define DEBUG */
+
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/init.h>
+#include <linux/platform_device.h>
+#include <linux/gpio.h>
+#include <linux/of.h>
+#include <linux/of_device.h>
+#include <linux/of_platform.h>
+#include <linux/of_gpio.h>
+
+#include <linux/delay.h>
+#include <linux/device.h>
+#include <linux/spi/spi.h>
+#include <linux/freezer.h>
+
+#include <linux/spi/spi.h>
+#include <linux/spi/spi_bitbang.h>
+
+#define DRIVER_NAME	"spi_lcd_st7725s"
+
+#define    P_DEBUG_SWITCH        (1)
+ 
+#if    (P_DEBUG_SWITCH > 0)
+    #define P_DEBUG_DEV(dev, fmt, args...)   printk("<1>" "<kernel>[%s %s %s(%d):%s]"fmt,\
+			                        dev_driver_string(dev), \
+			                        dev_name(dev), __FILE__, __LINE__,__FUNCTION__, ##args)
+    #define P_DEBUG(fmt, args...)   printk("<0>" "<kernel>[%s(%d):%s]"fmt, __FILE__, __LINE__, \
+			                        __FUNCTION__, ##args)
+    #define P_DEBUG_SIMPLE(fmt, args...)   printk("<0>" "<kernel>[%s]"fmt,  \
+			__FUNCTION__, ##args)
+
+	#define P_DEBUG_PORT(port, fmt, args...)    do{ if (port->line > 1){\
+				printk("<1>" "<kernel>[%s(%d):%s]"fmt, __FILE__, __LINE__, \
+						__FUNCTION__, ##args);}\
+				}while(0)
+#else
+    #define P_DEBUG_DEV(dev, fmt, args...)
+    #define P_DEBUG(fmt, args...)
+	#define P_DEBUG_SIMPLE(fmt, args...)
+	#define P_DEBUG_PORT(port, fmt, args...)    
+#endif
+
+#define REG_READ	0x80
+#define REG_WRITE	0x00
+
+/* Special registers */
+#define REG_TXLVL	0x08	/* Transmitter FIFO Level register */
+#define REG_RXLVL	0x09	/* Receiver FIFO Level register */
+#define REG_IOD		0x0A	/* IO Direction register */
+#define REG_IOS		0x0B	/* IO State register */
+#define REG_IOI		0x0C	/* IO Interrupt Enable register */
+#define REG_IOC		0x0E	/* IO Control register */
+
+#define IOC_SRESET	0x08    /* Software reset */
+#define IOC_GPIO30	0x04    /* GPIO 3:0 unset: as IO, set: as modem pins */
+#define IOC_GPIO74	0x02    /* GPIO 7:4 unset: as IO, set: as modem pins */
+#define IOC_IOLATCH	0x01    /* Unset: input unlatched, set: input latched */
+
+struct st7735_chip {
+	struct spi_device *spi;
+	unsigned 	rst_gpio;
+	unsigned	rst_active_low;
+
+	unsigned 	cd_gpio;
+	unsigned	cd_active_low;
+
+	unsigned 	backlight_gpio;
+	unsigned	backlight_active_low;
+};
+
+
+/* ******************************** SPI ********************************* */
+
+static inline u8 write_cmd(u8 reg, u8 ch)
+{
+	return REG_WRITE | (reg & 0xf) << 3 | (ch & 0x1) << 1;
+}
+
+static inline u8 read_cmd(u8 reg, u8 ch)
+{
+	return REG_READ  | (reg & 0xf) << 3 | (ch & 0x1) << 1;
+}
+
+#if 0
+/*
+ * st7735_write - Write a new register content (sync)
+ * @reg: Register offset
+ * @ch:  Channel (0 or 1)
+ */
+static int st7735_write(struct st7735_chip *ts, u8 reg, u8 ch, u8 val)
+{
+	u8 out[2];
+
+	out[0] = write_cmd(reg, ch);
+	out[1] = val;
+	return spi_write(ts->spi, out, sizeof(out));
+}
+
+/**
+ * st7735_read - Read back register content
+ * @reg: Register offset
+ * @ch:  Channel (0 or 1)
+ *
+ * Returns positive 8 bit value from the device if successful or a
+ * negative value on error
+ */
+static int st7735_read(struct st7735_chip *ts, unsigned reg, unsigned ch)
+{
+	return spi_w8r8(ts->spi, read_cmd(reg, ch));
+}
+#endif
+
+static int __devinit create_gpio(struct device_node *np, unsigned *pin, const char *name, int value)
+{
+	int ret, state;
+	enum of_gpio_flags flags;
+	unsigned gpio;
+
+	if (NULL == pin){
+		printk(KERN_INFO "pin must not be null\n");
+		return 0;
+	}
+	gpio	= of_get_named_gpio_flags(np, name, 0, &flags);
+
+	/* skip leds that aren't available */
+	if (!gpio_is_valid(gpio)) {
+		printk(KERN_INFO "unavailable gpio %d (%s)\n", gpio, name);
+		return 0;
+	}
+
+	ret = gpio_request(gpio, name);
+	if (ret < 0){
+		printk(KERN_INFO "gpio %d (%s) request failed\n", gpio, name);
+		return ret;
+	}
+
+	ret = gpio_direction_output(gpio, value);
+	if (ret < 0)
+		goto err;
+		
+	return 0;
+err:
+	gpio_free(led_dat->gpio);
+	return ret;
+}
+static int __devinit st7735_probe(struct spi_device *spi)
+{
+	int				ret;
+	struct st7735_chip *ts;
+	struct device_node *np = pdev->dev.of_node;
+
+	P_DEBUG_SIMPLE("enter\n");
+	ts = kzalloc(sizeof(struct st7735_chip), GFP_KERNEL);
+	if (!ts)
+		return -ENOMEM;        
+					
+	spi_set_drvdata(spi, ts);
+	ts->spi = spi;
+
+	//reset pin
+	create_gpio(&(ts->rst_gpio), "rst-gpios", 0);
+	//cd pin
+	create_gpio(&(ts->cd_gpio), "cd-gpios", 0);
+	//backlight pin
+	create_gpio(&(ts->rst_gpio), "rst-gpios", 0);
+
+
+
+
+
+
+	P_DEBUG_SIMPLE("exit\n");
+
+exit_destroy:
+	dev_set_drvdata(&spi->dev, NULL);
+	kfree(ts);
+	return ret;
+}
+
+static int __devexit st7735_remove(struct spi_device *spi)
+{
+	struct st7735_chip *ts = spi_get_drvdata(spi);
+
+	if (ts == NULL)
+		return -ENODEV;
+
+
+	kfree(ts);
+	return 0;
+}
+
+static const struct of_device_id st7735_dt_ids[] = {
+	{ .compatible = "st7735" },
+};
+
+MODULE_DEVICE_TABLE(of, atmel_serial_dt_ids);
+
+/* Spi driver data */
+static struct spi_driver st7735_spi_driver = {
+	.driver = {
+		.name		= DRIVER_NAME,
+		.bus		= &spi_bus_type,
+		.owner		= THIS_MODULE,
+		.of_match_table	= of_match_ptr(st7735_dt_ids),
+	},
+	.probe		=  st7735_probe,
+	//.shutdown        = st7735_shutdown,
+	.remove		= __devexit_p(st7735_remove),	
+};
+
+/* Driver init function */
+static int __init st7735_init(void)
+{
+	return spi_register_driver(&st7735_spi_driver);	
+}
+
+/* Driver exit function */
+static void __exit st7735_exit(void)
+{
+	spi_unregister_driver(&st7735_spi_driver);
+}
+
+/* register after spi postcore initcall and before
+ * subsys initcalls that may rely on these GPIOs
+ */
+subsys_initcall(st7735_init);
+module_exit(st7735_exit);
+
+MODULE_AUTHOR("jspower");
+MODULE_LICENSE("GPL v1");
+MODULE_DESCRIPTION("st7735 SPI based tft driver");
+MODULE_ALIAS("spi lcd:DRIVER_NAME");

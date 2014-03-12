@@ -30,7 +30,8 @@
 
 			indicator {
 				compatible = "gpio-leds";
-				status = "okay";
+				//status = "okay";
+				status = "disabled";
 
 				run {
 					label = "run";
