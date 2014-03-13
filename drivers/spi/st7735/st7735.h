@@ -101,6 +101,8 @@ struct st7735_chip {
 #define LCD_W			128
 #define LCD_H			160
 
+#define LCD_ROTATE		(1)
+
 //画笔颜色
 #define WHITE				 0xFFFF
 #define BLACK				 0  

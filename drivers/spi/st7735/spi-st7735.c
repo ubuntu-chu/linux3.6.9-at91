@@ -281,7 +281,8 @@ int st7735_open(struct inode *inode, struct file *filp)
 	//LCD_DrawLine(0, 0, 160, 128);
 	//LCD_DrawCircle(50, 50, 10);
 	LCD_ShowString(0, 0, "hello st7735");
-	//LCD_Fill(0, 0, 10, 20);
+	//LCD_ShowChar(0, 0, 'h', 0);
+	LCD_Fill(0, 0, 10, 20);
 
 	return nonseekable_open(inode, filp);
 } 
