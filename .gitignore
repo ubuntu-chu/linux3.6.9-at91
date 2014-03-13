@@ -28,6 +28,7 @@
 *.elf
 *.bin
 *.gz
+*.builtin
 
 #
 # Top-level generic files

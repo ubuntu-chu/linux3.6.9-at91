@@ -20,12 +20,17 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/atomic.h>
 #include <linux/platform_device.h>
 #include <linux/gpio.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/of_platform.h>
 #include <linux/of_gpio.h>
+#include <linux/mutex.h>
+#include <linux/cdev.h>
+#include <linux/fs.h>  
+#include <asm/uaccess.h> 
 
 #include <linux/delay.h>
 #include <linux/device.h>
@@ -63,6 +68,12 @@
 
 struct st7735_chip {
 	struct spi_device *spi;
+	struct cdev cdev;
+	dev_t devno;
+	struct mutex mutex;
+
+	atomic_t    open_cnt;
+
 	unsigned 	rst_gpio;
 	unsigned	rst_active_low;
 
@@ -156,6 +167,7 @@ void LCD_ShowNum(u16 x,u16 y,u32 num,u8 len);//显示数字
 void LCD_Show2Num(u16 x,u16 y,u16 num,u8 len);//显示2个数字
 void LCD_ShowString(u16 x,u16 y,const u8 *p); //显示一个字符串,16字体
 
+void LCD_DrawCircle(u16 x0,u16 y0,u8 r);
 
 #endif
 

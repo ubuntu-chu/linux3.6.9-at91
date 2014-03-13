@@ -61,8 +61,8 @@
 					backlight-gpios = <&pioB 11 0>;
 					cd-gpios = <&pioB 12 0>;
 					rst-gpios = <&pioB 13 0>;
-					spi-cpha;
-					spi-cpol;
+					//spi-cpha;							//rise edge tranfer data  both mode0 and mode3 are ok
+					//spi-cpol;
 				};
 			};
 		};

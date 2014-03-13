@@ -78,17 +78,38 @@ static int write_reg_data16(u8 reg, u16 data)
 	return write_data16(data);
 }
 
-static void address_set(u16 x1, u16 y1, u16 x2, u16 y2)
+static void address_set_original(u16 x1, u16 y1, u16 x2, u16 y2)
 {
 	write_reg_addr(0x2a);
+	
 	write_data16(x1);
 	write_data16(x2);
 
 	write_reg_addr(0x2b);
 	write_data16(y1);
 	write_data16(y2);
-
 	write_reg_addr(0x2c);
+}
+
+static void address_set(u16 x1, u16 y1, u16 x2, u16 y2)
+{
+	u16 x1_tmp, x2_tmp, y1_tmp, y2_tmp;
+
+#if 1
+	//printk("x1 = %d y1 = %d x2 = %d y2 = %d\n", x1, y1, x2, y2);
+	//x1_tmp = LCD_W - y1;
+	//x2_tmp = LCD_W - y2;
+	x1_tmp = y1;
+	x2_tmp = y2;
+	y1_tmp = LCD_H - 1 - x1;
+	y2_tmp = LCD_H - 1 - x2;
+	//printk("x1_tmp = %d y1_tmp = %d x2_tmp = %d y2_tmp = %d\n", x1_tmp, y1_tmp, x2_tmp, y2_tmp);
+	address_set_original(x1_tmp, y1_tmp, x2_tmp, y2_tmp);
+#else
+
+	address_set_original(x1, y1, x2, y2);
+#endif
+
 }
 
 void lcd_init(void)
@@ -188,7 +209,7 @@ void LCD_Clear(void)
 {
 	u16 i,j;
 
-	address_set(0,0,LCD_W-1,LCD_H-1);
+	address_set_original(0,0,LCD_W-1,LCD_H-1);
 	for(i=0;i<LCD_W;i++)
 	{
 		for (j=0;j<LCD_H;j++)
@@ -213,10 +234,9 @@ void LCD_Fill(u16 xsta,u16 ysta,u16 xend,u16 yend)
 {          
 	u16 i,j; 
 
-	address_set(xsta,ysta,xend,yend);      //设置光标位置 
 	for(i=ysta;i<=yend;i++) {			
 		for(j=xsta;j<=xend;j++)
-			write_data16(g_foreground_color);//设置光标位置	    
+			LCD_DrawPoint(i, j);
 	}							    
 }  
 
@@ -271,7 +291,7 @@ void LCD_DrawRectangle(u16 x1, u16 y1, u16 x2, u16 y2)
 //在指定位置画一个指定大小的圆
 //(x,y):中心点
 //r    :半径
-void Draw_Circle(u16 x0,u16 y0,u8 r)
+void LCD_DrawCircle(u16 x0,u16 y0,u8 r)
 {
 	int a,b;
 	int di;
@@ -315,10 +335,11 @@ void LCD_ShowChar(u16 x,u16 y,u8 num,u8 mode)
 	u16 x0=x;
 	u16 colortemp=g_foreground_color;      
 
-	if(x>LCD_W-16||y>LCD_H-16)return;    
+	//if(x>LCD_W-16||y>LCD_H-16)return;    
 	//设置窗口   
 	num=num-' ';//得到偏移后的值
-	address_set(x,y,x+8-1,y+16-1);      //设置光标位置 
+	//address_set(x,y,x+8-1,y+16-1);      //设置光标位置 
+//	address_set(x,y,x+16-1,y+8-1);      //设置光标位置 
 	if(!mode) //非叠加方式
 	{
 		for(pos=0;pos<16;pos++)
@@ -328,7 +349,12 @@ void LCD_ShowChar(u16 x,u16 y,u8 num,u8 mode)
 			{                 
 				if(temp&0x01)g_foreground_color=colortemp;
 				else g_foreground_color=g_background_color;
+
+//				address_set(x+pos,y+t,x+pos+16-1,y+t+8-1);      //设置光标位置 
+				//address_set(x+t,y+pos,x+t+16-1,y+pos+8-1);      //设置光标位置 
+				//address_set(x+t,y+pos,x+t+8-1,y+pos+16-1);      //设置光标位置 
 				write_data16(g_foreground_color);
+//		LCD_DrawPoint(x+t,y+pos);
 				temp>>=1; 
 				x++;
 			}
