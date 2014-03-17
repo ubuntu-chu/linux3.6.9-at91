@@ -87,6 +87,16 @@ struct st7735_chip {
 	unsigned	backlight_active_low;
 };
 
+struct gui_bitmap {
+	u16		x_size;
+	u16		y_size;
+	u16		bytesperline;
+	u16     bitsperPixel;
+	u8     *data;
+	u8     *palette;
+	u8     *methods;
+};
+
 #define RESET_PIN_HIGH()	gpio_set_value_cansleep(paint_device->rst_gpio, 1)
 #define RESET_PIN_LOW() 	gpio_set_value_cansleep(paint_device->rst_gpio, 0)
 

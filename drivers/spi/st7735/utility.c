@@ -258,30 +258,59 @@ void LCD_DrawLine(u16 x1, u16 y1, u16 x2, u16 y2)
 	delta_y=y2-y1; 
 	uRow=x1; 
 	uCol=y1; 
-	if(delta_x>0)incx=1; //设置单步方向 
-	else if(delta_x==0)incx=0;//垂直线 
-	else {incx=-1;delta_x=-delta_x;} 
-	if(delta_y>0)incy=1; 
-	else if(delta_y==0)incy=0;//水平线 
-	else{incy=-1;delta_y=-delta_y;} 
-	if( delta_x>delta_y)distance=delta_x; //选取基本增量坐标轴 
-	else distance=delta_y; 
-	for(t=0;t<=distance+1;t++ )//画线输出 
-	{  
-		LCD_DrawPoint(uRow,uCol);//画点 
-		xerr+=delta_x ; 
-		yerr+=delta_y ; 
-		if(xerr>distance) 
-		{ 
-			xerr-=distance; 
-			uRow+=incx; 
-		} 
-		if(yerr>distance) 
-		{ 
-			yerr-=distance; 
-			uCol+=incy; 
-		} 
-	}  
+	if(delta_x>0)
+		incx=1; //设置单步方向 
+	else if(delta_x==0)
+		incx=0;//垂直线 
+	else {
+		incx=-1;delta_x=-delta_x;
+	} 
+
+	if(delta_y>0)
+		incy=1; 
+	else if(delta_y==0)
+		incy=0;//水平线 
+	else{
+		incy=-1;delta_y=-delta_y;
+	} 
+
+	if( delta_x>delta_y)
+		distance=delta_x; //选取基本增量坐标轴 
+	else 
+		distance=delta_y; 
+
+	//vline
+	if (incx == 0){
+		if (y1 < y2){
+			LCD_Fill(x1, y1, x2, y2);
+		}else {
+			LCD_Fill(x1, y2, x2, y1);
+		}
+	//hline
+	}else if (incy == 0){
+		if (x1 < x2){
+			LCD_Fill(x1, y1, x2, y2);
+		}else {
+			LCD_Fill(x2, y1, x1, y2);
+		}
+	}else {
+		for(t=0;t<=distance+1;t++ )//画线输出 
+		{  
+			LCD_DrawPoint(uRow,uCol);//画点 
+			xerr+=delta_x ; 
+			yerr+=delta_y ; 
+			if(xerr>distance) 
+			{ 
+				xerr-=distance; 
+				uRow+=incx; 
+			} 
+			if(yerr>distance) 
+			{ 
+				yerr-=distance; 
+				uCol+=incy; 
+			} 
+		}  
+	}
 }    
 
 //画矩形
