@@ -1139,14 +1139,12 @@ static int atmel_spi_interrupt_dma(struct atmel_spi *as,
 	imr = spi_readl(as, IMR);
 	status = spi_readl(as, SR);
 	pending = status & imr;
-	//printk("imr = 0x%x  status = 0x%x\n", imr, status);
 
 	if (pending & SPI_BIT(OVRES)) {
 		ret = IRQ_HANDLED;
 		spi_writel(as, IDR, SPI_BIT(OVRES));
 		dev_warn(master->dev.parent, "overrun\n");
 
-		//printk("atmel_spi_interrupt_dma  overrun\n");
 		/*
 		 * When we get an overrun, we disregard the current
 		 * transfer. Data will not be copied back from any
@@ -1169,7 +1167,6 @@ static int atmel_spi_interrupt_dma(struct atmel_spi *as,
 	} else if (pending & SPI_BIT(RDRF)) {
 		atmel_spi_lock(as);
 
-		//printk("atmel_spi_interrupt_dma  rdrf\n");
 		if (as->current_remaining_bytes) {
 			ret = IRQ_HANDLED;
 			xfer = as->current_transfer;
@@ -1177,15 +1174,12 @@ static int atmel_spi_interrupt_dma(struct atmel_spi *as,
 			if (!as->current_remaining_bytes) {
 				/* no more data to xfer, kick tasklet */
 				spi_writel(as, IDR, pending);
-				//tasklet_schedule(&as->tasklet);
-				atmel_spi_tasklet_func((unsigned long)master);
-
+				tasklet_schedule(&as->tasklet);
 			}
 		}
 
 		atmel_spi_unlock(as);
 	} else {
-		//printk("atmel_spi_interrupt_dma  none\n");
 		WARN_ONCE(pending, "IRQ not handled, pending = %x\n", pending);
 		ret = IRQ_HANDLED;
 		spi_writel(as, IDR, pending);
