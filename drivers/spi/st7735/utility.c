@@ -44,13 +44,15 @@ u16 background_color_get(void){
 }
 /* ******************************** SPI ********************************* */
 
+static int write_data(u8 *data, u16 len)
+{
+	CD_PIN_HIGH();
+	return spi_write(paint_device->spi, data, len);
+}
+
 static int write_data8(u8 data)
 {
-	u8 out[1];
-
-	CD_PIN_HIGH();
-	out[0] = data;
-	return spi_write(paint_device->spi, out, sizeof(out));
+	return write_data(&data, sizeof(u8));
 }
 
 static int write_data16(u16 data)
@@ -60,7 +62,7 @@ static int write_data16(u16 data)
 	CD_PIN_HIGH();
 	out[0] = data >> 8;
 	out[1] = data & 0x00ff;
-	return spi_write(paint_device->spi, out, sizeof(out));
+	return write_data(out, sizeof(out));
 }
 
 static int write_reg_addr(u8 reg)
@@ -72,32 +74,32 @@ static int write_reg_addr(u8 reg)
 	return spi_write(paint_device->spi, out, sizeof(out));
 }
 
+#if 0
 static int write_reg_data16(u8 reg, u16 data)
 {
 	write_reg_addr(reg);
 	return write_data16(data);
 }
+#endif
 
 static void address_set(u16 x1, u16 y1, u16 x2, u16 y2)
 {
+	u8 out[4];
+
 	write_reg_addr(0x2a);
-	
-#if (LCD_ROTATE > 0)
-	write_data16(y1);
-	write_data16(y2);
-#else
-	write_data16(x1);
-	write_data16(x2);
-#endif
+	out[0] = x1 >> 8;
+	out[1] = x1 & 0x00ff;
+	out[2] = x2 >> 8;
+	out[3] = x2 & 0x00ff;
+	write_data(out, sizeof(out));
 
 	write_reg_addr(0x2b);
-#if (LCD_ROTATE > 0)
-	write_data16(LCD_H-1-x1);
-	write_data16(LCD_H-1-x2);
-#else
-	write_data16(y1);
-	write_data16(y2);
-#endif
+	out[0] = y1 >> 8;
+	out[1] = y1 & 0x00ff;
+	out[2] = y2 >> 8;
+	out[3] = y2 & 0x00ff;
+	write_data(out, sizeof(out));
+	
 	write_reg_addr(0x2c);
 }
 
@@ -150,7 +152,11 @@ void lcd_init(void)
 	write_reg_addr(0xC5); //VCOM
 	write_data8(0x1A);
 	write_reg_addr(0x36); //MX, MY, RGB mode
+#if (LCD_ROTATE > 0)
+	write_data8(0x60);
+#else 
 	write_data8(0xC0);
+#endif
 	//--------------------ST7735S Gamma Sequence---------------//
 	write_reg_addr(0xE0);
 	write_data8(0x04);
@@ -189,23 +195,29 @@ void lcd_init(void)
 	//----------------End ST7735S Gamma Sequence------------------//
 	write_reg_addr(0x3A); //65k mode
 	write_data8(0x05);
+	LCD_DisplayOn();
+}
+
+void LCD_DisplayOn(void){
 	write_reg_addr(0x29); //Display on
+}
+
+void LCD_DisplayOff(void){
+	write_reg_addr(0x28); //Display off
 }
 
 //清屏函数
 //Color:要清屏的填充色
 void LCD_Clear(void)
 {
-	u16 i,j;
+	u32   i;
+	u16   cc = COLOR_CC(g_background_color);
 
 	address_set(0,0,LCD_W-1,LCD_H-1);
-	for(i=0;i<LCD_W;i++)
-	{
-		for (j=0;j<LCD_H;j++)
-		{
-			write_data16(g_background_color);
-		}
+	for (i = 0; i < LCD_FRAME_BUFF_SIZE/sizeof(u16); ++i){
+		paint_device->frame_buff[i] = cc;
 	}
+	write_data((u8 *)paint_device->frame_buff, LCD_FRAME_BUFF_SIZE);
 }
 
 //画点
@@ -222,18 +234,15 @@ void LCD_DrawPoint(u16 x,u16 y)
 void LCD_Fill(u16 xsta,u16 ysta,u16 xend,u16 yend)
 {          
 	u16 i,j; 
+	u32 z = 0;
+	u16   cc = COLOR_CC(g_foreground_color);
 
-	#if !(LCD_ROTATE > 0)
-		address_set(xsta,ysta,xend,yend);
-	#endif
+	address_set(xsta,ysta,xend,yend);
 	for(i=ysta;i<=yend;i++) {			
 		for(j=xsta;j<=xend;j++)
-		#if (LCD_ROTATE > 0)
-			LCD_DrawPoint(i, j);
-		#else
-			write_data16(g_foreground_color);		    
-		#endif
+			paint_device->frame_buff[z++] = cc;
 	}							    
+	write_data((u8 *)paint_device->frame_buff, z<<1);
 }  
 
 //画线
@@ -328,18 +337,17 @@ void LCD_ShowChar(u16 x,u16 y,u8 num,u8 mode)
 {
 	u8 temp;
 	u8 pos,t;
-	u16 colortemp=g_foreground_color;      
+	u32  i = 0;
+	u16 color;
 
 #define FONT_WIDTH   (8)
 #define FONT_HEIGHT   (16)
 
-	//if(x>LCD_W-16||y>LCD_H-16)return;    
+	if(x>LCD_W-16||y>LCD_H-16)return;    
 	//设置窗口   
 	num=num-' ';//得到偏移后的值
-#if !(LCD_ROTATE > 0)
-
 	address_set(x,y,x+FONT_WIDTH-1,y+FONT_HEIGHT-1);      //设置光标位置 
-#endif
+
 	if(!mode) //非叠加方式
 	{
 		for(pos=0;pos<FONT_HEIGHT;pos++)
@@ -347,18 +355,14 @@ void LCD_ShowChar(u16 x,u16 y,u8 num,u8 mode)
 			temp=asc2_1608[(u16)num*FONT_HEIGHT+pos]; //调用1608字体
 			for(t=0;t<FONT_WIDTH;t++)
 			{                 
-				if(temp&0x01)g_foreground_color=colortemp;
-				else g_foreground_color=g_background_color;
+				if(temp&0x01)color = g_foreground_color;
+				else color = g_background_color;
 
-			#if (LCD_ROTATE > 0)
-
-				LCD_DrawPoint(x+t,y+pos);
-			#else
-				write_data16(g_foreground_color);
-			#endif
+				paint_device->frame_buff[i++] = COLOR_CC(color);
 				temp>>=1; 
 			}
 		}
+		write_data((u8 *)paint_device->frame_buff, i<<1);
 	}else//叠加方式
 	{
 		for(pos=0;pos<FONT_HEIGHT;pos++)
@@ -371,7 +375,6 @@ void LCD_ShowChar(u16 x,u16 y,u8 num,u8 mode)
 			}
 		}
 	}
-	g_foreground_color=colortemp;				  
 }   
 //m^n函数
 u32 mypow(u8 m,u8 n)

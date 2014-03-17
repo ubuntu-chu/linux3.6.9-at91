@@ -38,6 +38,7 @@
 #include <linux/freezer.h>
 
 #include <linux/delay.h>
+#include <linux/slab.h>
 
 #include <linux/spi/spi.h>
 #include <linux/spi/spi_bitbang.h>
@@ -72,6 +73,8 @@ struct st7735_chip {
 	dev_t devno;
 	struct mutex mutex;
 
+	u16        *frame_buff;
+
 	atomic_t    open_cnt;
 
 	unsigned 	rst_gpio;
@@ -97,11 +100,19 @@ struct st7735_chip {
 #define CD_PROP_NAME       "cd-gpios"
 #define BACKLIGHT_PROP_NAME      "backlight-gpios"
 
+#define LCD_ROTATE		(1)
+
+#if (LCD_ROTATE > 0)
+//定义LCD的尺寸
+#define LCD_W			160
+#define LCD_H			128
+#else
 //定义LCD的尺寸
 #define LCD_W			128
 #define LCD_H			160
+#endif
 
-#define LCD_ROTATE		(1)
+#define LCD_FRAME_BUFF_SIZE   (LCD_W*LCD_H*2)
 
 //画笔颜色
 #define WHITE				 0xFFFF
@@ -130,6 +141,8 @@ struct st7735_chip {
 
 #define LGRAYBLUE        0XA651 //浅灰蓝色(中间层颜色)
 #define LBBLUE           0X2B12 //浅棕蓝色(选择条目的反色)
+
+#define COLOR_CC(x)   ((x >> 8) | ((x&0xff) << 8))
 
 extern u16 g_foreground_color;
 extern u16 g_background_color;
@@ -170,6 +183,8 @@ void LCD_Show2Num(u16 x,u16 y,u16 num,u8 len);//显示2个数字
 void LCD_ShowString(u16 x,u16 y,const u8 *p); //显示一个字符串,16字体
 
 void LCD_DrawCircle(u16 x0,u16 y0,u8 r);
+void LCD_DisplayOn(void);
+void LCD_DisplayOff(void);
 
 #endif
 

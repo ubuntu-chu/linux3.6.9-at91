@@ -32,8 +32,10 @@ static ssize_t lcd_clear_store(struct device *dev,
 	if (status == 0) {
 		background_color_set(value);	
 		P_DEBUG_SIMPLE("vaule = %ld\n", value);
+		printk("start\n");
 		status = size;
 		LCD_Clear();
+		printk("end\n");
 	}
 	mutex_unlock(&sc->mutex);
 
@@ -107,15 +109,21 @@ static ssize_t cd_value_store(struct device *dev,
 static const DEVICE_ATTR(cd_value, 0644,
 	cd_value_show, cd_value_store);
 
+#endif
+#if 1
 
 static ssize_t backlight_value_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	ssize_t			status;
 	int value;
+	struct spi_device *spi = container_of(dev, struct spi_device, dev);
+	struct st7735_chip *sc = spi_get_drvdata(spi);
 
+	mutex_lock(&(sc->mutex));
 	value = !!gpio_get_value_cansleep(paint_device->backlight_gpio);
 	status = sprintf(buf, "%d\n", value);
+	mutex_unlock(&(sc->mutex));
 
 	return status;
 }
@@ -125,13 +133,17 @@ static ssize_t backlight_value_store(struct device *dev,
 {
 	ssize_t			status;
 	long		value;
+	struct spi_device *spi = container_of(dev, struct spi_device, dev);
+	struct st7735_chip *sc = spi_get_drvdata(spi);
 
+	mutex_lock(&(sc->mutex));
 	status = strict_strtol(buf, 0, &value);
 	if (status == 0) {
 		P_DEBUG_SIMPLE("vaule = %ld\n", value);
-		gpio_set_value_cansleep(paint_device->backlight_gpio, value != 0);
+		gpio_set_value_cansleep(paint_device->backlight_gpio, !(value != 0));
 		status = size;
 	}
+	mutex_unlock(&(sc->mutex));
 
 	return status;
 }
@@ -139,6 +151,33 @@ static ssize_t backlight_value_store(struct device *dev,
 static const DEVICE_ATTR(backlight_value, 0644,
 	backlight_value_show, backlight_value_store);
 #endif
+
+static ssize_t lcd_display_store(struct device *dev,
+				struct device_attribute *attr, const char *buf, size_t size)
+{
+	ssize_t			status;
+	long		value;
+	struct spi_device *spi = container_of(dev, struct spi_device, dev);
+	struct st7735_chip *sc = spi_get_drvdata(spi);
+
+	mutex_lock(&(sc->mutex));
+	status = strict_strtol(buf, 0, &value);
+	if (status == 0) {
+		P_DEBUG_SIMPLE("vaule = %ld\n", value);
+		if (!!value){
+			LCD_DisplayOn();
+		}else {
+			LCD_DisplayOff();
+		}
+		status = size;
+	}
+	mutex_unlock(&(sc->mutex));
+
+	return status;
+}
+
+static const DEVICE_ATTR(lcd_display, 0222,
+	NULL, lcd_display_store);
 
 static int __devinit create_gpio(struct device_node *np, unsigned *pin, const char *name, const char *gpio_name, int value)
 {
@@ -206,7 +245,7 @@ static int st7735_gpio_request(struct st7735_chip*sc){
 	ret = create_gpio(np, &(sc->backlight_gpio), BACKLIGHT_PROP_NAME, DRIVER_NAME":"BACKLIGHT_PROP_NAME, 1);
 	if (ret)
 		goto exit_2;
-#if 0
+#if 1
 	ret = device_create_file(&(spi->dev), &dev_attr_backlight_value);
 	if (ret != 0)
 		printk(KERN_INFO "device file backlight_value create failed\n");
@@ -214,13 +253,22 @@ static int st7735_gpio_request(struct st7735_chip*sc){
 
 	ret = device_create_file(&(spi->dev), &dev_attr_lcd_clear);
 	if (ret != 0){
-		printk(KERN_INFO "device lcd_clear backlight_value create failed\n");
+		printk(KERN_INFO "device lcd_clear create failed\n");
 		goto exit_3;
+	}
+
+	ret = device_create_file(&(spi->dev), &dev_attr_lcd_display);
+	if (ret != 0){
+		printk(KERN_INFO "device lcd_display create failed\n");
+		goto exit_4;
 	}
 
 	return 0;
 
+exit_4:
+	device_remove_file(&(spi->dev), &dev_attr_lcd_display);
 exit_3:
+	device_remove_file(&(spi->dev), &dev_attr_backlight_value);
 	gpio_free(sc->backlight_gpio);
 exit_2:
 	gpio_free(sc->cd_gpio);
@@ -241,9 +289,10 @@ static int st7735_gpio_release(struct st7735_chip*sc){
 #if 0
 	device_remove_file(&(spi->dev), &dev_attr_rst_value);
 	device_remove_file(&(spi->dev), &dev_attr_cd_value);
-	device_remove_file(&(spi->dev), &dev_attr_backlight_value);
 #endif
 	mutex_lock(&(sc->mutex));
+	device_remove_file(&(spi->dev), &dev_attr_backlight_value);
+	device_remove_file(&(spi->dev), &dev_attr_lcd_display);
 	device_remove_file(&(spi->dev), &dev_attr_lcd_clear);
 	mutex_unlock(&(sc->mutex));
 	gpio_free(sc->cd_gpio);
@@ -272,17 +321,17 @@ int st7735_open(struct inode *inode, struct file *filp)
 		return -EACCES;  
 	}
 
-	foreground_color_set(BLACK);	
+	foreground_color_set(YELLOW);	
 	background_color_set(WHITE);	
-	background_color_set(RED);	
 	lcd_init();
+	background_color_set(RED);	
 	LCD_Clear();
 	BACKLIGHT_PIN_ON();
 	//LCD_DrawLine(0, 0, 160, 128);
 	//LCD_DrawCircle(50, 50, 10);
-	LCD_ShowString(0, 0, "hello st7735");
+	LCD_ShowString(0, 0, "hello st7735 ------------------------");
 	//LCD_ShowChar(0, 0, 'h', 0);
-	LCD_Fill(0, 0, 10, 20);
+	LCD_Fill(0, 0, 40, 20);
 
 	return nonseekable_open(inode, filp);
 } 
@@ -356,6 +405,10 @@ static int __devinit st7735_probe(struct spi_device *spi)
 		ret = PTR_ERR(dev_device);  
 		goto exit_destroy_3;  
 	}  
+	sc->frame_buff   = (u16 *)kmalloc(LCD_FRAME_BUFF_SIZE, GFP_KERNEL);
+	if (sc->frame_buff == NULL){
+		goto exit_destroy_3;
+	}
 
 	P_DEBUG_SIMPLE("exit\n");
 	return 0;
@@ -379,6 +432,9 @@ static int __devexit st7735_remove(struct spi_device *spi)
 	if (sc == NULL)
 		return -ENODEV;
 
+	if (sc->frame_buff != NULL){
+		kfree(sc->frame_buff);
+	}
 	mutex_destroy(&(sc->mutex));
 	device_destroy(dev_class, sc->devno);  
 	class_destroy(dev_class); 
