@@ -333,7 +333,10 @@ int st7735_open(struct inode *inode, struct file *filp)
 	//LCD_DrawLine(0, 10, 160, 10);
 	LCD_DrawLine(160, 10, 100, 10);
 	//LCD_DrawCircle(50, 50, 10);
-	//LCD_ShowString(0, 0, "hello st7735 ------------------------");
+	LCD_FillCircle(50, 50, 10);
+	LCD_DrawArc(130, 60, 20, 30, 90);
+	LCD_DrawEllipse(110, 130, 45, 90);
+	LCD_ShowString(0, 0, "hello st7735 ----HHHHHHHHHHHHHHHHHH--");
 	//LCD_ShowChar(0, 0, 'h', 0);
 //	LCD_Fill(0, 0, 40, 20);
 	//LCD_DrawRectangle(0, 0, 40, 20);

@@ -124,6 +124,14 @@ struct gui_bitmap {
 
 #define LCD_FRAME_BUFF_SIZE   (LCD_W*LCD_H*2)
 
+typedef int		int32;
+typedef unsigned int		uint32;
+typedef unsigned char		uint8;
+#define GUI_LCM_YMAX    LCD_H
+#define GUI_LCM_XMAX    LCD_W
+
+
+
 //画笔颜色
 #define WHITE				 0xFFFF
 #define BLACK				 0  
@@ -158,9 +166,21 @@ extern u16 g_foreground_color;
 extern u16 g_background_color;
 extern struct st7735_chip *paint_device;
 
+struct font{
+    u8        *data;
+    u8       width;
+    u8       height;
+    u8       byteperline;
+};
+
 extern unsigned char image[];
 extern unsigned char hanzi[];
 extern unsigned char asc2_1608[1520];
+
+extern struct font  t_font8x16;
+extern struct font *pfont;
+
+
 
 void paint_device_set(struct st7735_chip *pd);
 u16 foreground_color_set(u16 color);
@@ -193,8 +213,13 @@ void LCD_Show2Num(u16 x,u16 y,u16 num,u8 len);//显示2个数字
 void LCD_ShowString(u16 x,u16 y,const u8 *p); //显示一个字符串,16字体
 
 void LCD_DrawCircle(u16 x0,u16 y0,u8 r);
+void LCD_FillCircle(u16 x0, u16 y0, u8 r);
+void  LCD_FillEllipse(uint32 x0, uint32 x1, uint32 y0, uint32 y1);
+void  LCD_DrawEllipse(uint32 x0, uint32 x1, uint32 y0, uint32 y1);
+void  LCD_DrawArc(uint32 x, uint32 y, uint32 r, uint32 stangle, uint32 endangle);
 void LCD_DisplayOn(void);
 void LCD_DisplayOff(void);
+void font_set(struct font *font);
 
 #endif
 

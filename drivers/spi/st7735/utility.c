@@ -18,9 +18,22 @@
 u16 g_foreground_color = 0x0000;
 u16 g_background_color = 0xffff;
 struct st7735_chip *paint_device;
+struct font *pfont;
+u16  g_font_width;
+u16  g_font_height;
+u16  g_font_byteperline;
+u8  *g_font_data;
 
 void paint_device_set(struct st7735_chip *pd){
 	paint_device	= pd;
+}
+
+void font_set(struct font *font){
+	pfont			= font;
+	g_font_width	= font->width;
+	g_font_height   = font->height;
+	g_font_byteperline	= font->byteperline;
+	g_font_data		= font->data;
 }
 
 u16 foreground_color_set(u16 color){
@@ -196,6 +209,8 @@ void lcd_init(void)
 	write_reg_addr(0x3A); //65k mode
 	write_data8(0x05);
 	LCD_DisplayOn();
+
+	font_set(&t_font8x16);
 }
 
 void LCD_DisplayOn(void){
@@ -245,6 +260,8 @@ void LCD_Fill(u16 xsta,u16 ysta,u16 xend,u16 yend)
 	write_data((u8 *)paint_device->frame_buff, z<<1);
 }  
 
+#define GUI_HLine(x1, y1, x2, color)  LCD_DrawLine(x1,y1,x2,y1)
+
 //画线
 //x1,y1:起点坐标
 //x2,y2:终点坐标  
@@ -280,19 +297,18 @@ void LCD_DrawLine(u16 x1, u16 y1, u16 x2, u16 y2)
 		distance=delta_y; 
 
 	//vline
-	if (incx == 0){
-		if (y1 < y2){
-			LCD_Fill(x1, y1, x2, y2);
-		}else {
-			LCD_Fill(x1, y2, x2, y1);
+	if ((incy == 0) || (incx == 0)){
+		if (y1 > y2){
+			t		= y1;
+			y1		= y2;
+			y2		= t;
 		}
-	//hline
-	}else if (incy == 0){
-		if (x1 < x2){
-			LCD_Fill(x1, y1, x2, y2);
-		}else {
-			LCD_Fill(x2, y1, x1, y2);
+		if (x1 > x2){
+			t		= x1;
+			x1		= x2;
+			x2		= t;
 		}
+		LCD_Fill(x1, y1, x2, y2);
 	}else {
 		for(t=0;t<=distance+1;t++ )//画线输出 
 		{  
@@ -325,34 +341,846 @@ void LCD_DrawRectangle(u16 x1, u16 y1, u16 x2, u16 y2)
 //在指定位置画一个指定大小的圆
 //(x,y):中心点
 //r    :半径
-void LCD_DrawCircle(u16 x0,u16 y0,u8 r)
-{
-	int a,b;
-	int di;
-	a=0;b=r;  
-	di=3-(r<<1);             //判断下个点位置的标志
-	while(a<=b)
-	{
-		LCD_DrawPoint(x0-b,y0-a);             //3           
-		LCD_DrawPoint(x0+b,y0-a);             //0           
-		LCD_DrawPoint(x0-a,y0+b);             //1       
-		LCD_DrawPoint(x0-b,y0-a);             //7           
-		LCD_DrawPoint(x0-a,y0-b);             //2             
-		LCD_DrawPoint(x0+b,y0+a);             //4               
-		LCD_DrawPoint(x0+a,y0-b);             //5
-		LCD_DrawPoint(x0+a,y0+b);             //6 
-		LCD_DrawPoint(x0-b,y0+a);             
-		a++;
-		//使用Bresenham算法画圆     
-		if(di<0)di +=4*a+6;  
+void  LCD_DrawCircle(u16 x0, u16 y0, u8 r)
+{  
+#define GUI_Point(x,y,z)    LCD_DrawPoint(x,y)       
+
+	int32  draw_x0, draw_y0;// 刽图点坐标变量
+	int32  draw_x1, draw_y1;
+	int32  draw_x2, draw_y2;
+	int32  draw_x3, draw_y3;
+	int32  draw_x4, draw_y4;
+	int32  draw_x5, draw_y5;
+	int32  draw_x6, draw_y6;
+	int32  draw_x7, draw_y7;
+	int32  xx, yy;// 画圆控制变量
+
+	int32  di;// 决策变量
+	//u16   color = COLOR_CC(g_foreground_color);
+
+	/* 参数过滤 */
+	if(0==r) return;
+
+	/* 计算出8个特殊点(0、45、90、135、180、225、270度)，进行显示 */
+	draw_x0 = draw_x1 = x0;
+	draw_y0 = draw_y1 = y0 + r;
+	if(draw_y0<GUI_LCM_YMAX) GUI_Point(draw_x0, draw_y0, color);// 90度
+
+	draw_x2 = draw_x3 = x0;
+	draw_y2 = draw_y3 = y0 - r;
+	if(draw_y2>=0) GUI_Point(draw_x2, draw_y2, color);// 270度
+
+
+	draw_x4 = draw_x6 = x0 + r;
+	draw_y4 = draw_y6 = y0;
+	if(draw_x4<GUI_LCM_XMAX) GUI_Point(draw_x4, draw_y4, color);// 0度
+
+	draw_x5 = draw_x7 = x0 - r;
+	draw_y5 = draw_y7 = y0;
+	if(draw_x5>=0) GUI_Point(draw_x5, draw_y5, color);// 180度   
+	if(1==r) return;// 若半径为1，则已圆画完
+
+
+	/* 使用Bresenham法进行画圆 */
+	di = 3 - 2*r;// 初始化决策变量
+
+	xx = 0;
+	yy = r;
+	while(xx<yy)
+	{  
+		if(di<0)
+		{  di += 4*xx + 6;      
+		}
 		else
-		{
-			di+=10+4*(a-b);   
-			b--;
-		} 
-		LCD_DrawPoint(x0+a,y0+b);
+		{  di += 4*(xx - yy) + 10;
+
+		yy--;  
+		draw_y0--;
+		draw_y1--;
+		draw_y2++;
+		draw_y3++;
+		draw_x4--;
+		draw_x5++;
+		draw_x6--;
+		draw_x7++;		
 	}
-} 
+
+	xx++;   
+	draw_x0++;
+	draw_x1--;
+	draw_x2++;
+	draw_x3--;
+	draw_y4++;
+	draw_y5++;
+	draw_y6--;
+	draw_y7--;
+
+
+	/* 要判断当前点是否在有效范围内 */
+	if( (draw_x0<=GUI_LCM_XMAX)&&(draw_y0>=0) )
+	{  GUI_Point(draw_x0, draw_y0, color);
+	}    
+	if( (draw_x1>=0)&&(draw_y1>=0) )
+	{  GUI_Point(draw_x1, draw_y1, color);
+	}
+	if( (draw_x2<=GUI_LCM_XMAX)&&(draw_y2<=GUI_LCM_YMAX) )
+	{  GUI_Point(draw_x2, draw_y2, color);   
+	}
+	if( (draw_x3>=0)&&(draw_y3<=GUI_LCM_YMAX) )
+	{  GUI_Point(draw_x3, draw_y3, color);
+	}
+	if( (draw_x4<=GUI_LCM_XMAX)&&(draw_y4>=0) )
+	{  GUI_Point(draw_x4, draw_y4, color);
+	}
+	if( (draw_x5>=0)&&(draw_y5>=0) )
+	{  GUI_Point(draw_x5, draw_y5, color);
+	}
+	if( (draw_x6<=GUI_LCM_XMAX)&&(draw_y6<=GUI_LCM_YMAX) )
+	{  GUI_Point(draw_x6, draw_y6, color);
+	}
+	if( (draw_x7>=0)&&(draw_y7<=GUI_LCM_YMAX) )
+	{  GUI_Point(draw_x7, draw_y7, color);
+	}
+	}
+}
+
+/****************************************************************************
+* 名称：GUI_CircleFill()
+* 功能：指定圆心位置及半径，画圆并填充，填充色与边框色一样。
+* 入口参数： x0		圆心的x坐标值
+*           y0		圆心的y坐标值
+*           r       圆的半径
+*           color	填充颜色
+* 出口参数：无
+* 说明：操作失败原因是指定地址超出有效范围。
+****************************************************************************/
+
+void  LCD_FillCircle(u16 x0, u16 y0, u8 r)
+{  int32  draw_x0, draw_y0;			// 刽图点坐标变量
+   int32  draw_x1, draw_y1;	
+   int32  draw_x2, draw_y2;	
+   int32  draw_x3, draw_y3;	
+   int32  draw_x4, draw_y4;	
+   int32  draw_x5, draw_y5;	
+   int32  draw_x6, draw_y6;	
+   int32  draw_x7, draw_y7;	
+   int32  fill_x0, fill_y0;			// 填充所需的变量，使用垂直线填充
+   int32  fill_x1;
+   int32  xx, yy;					// 画圆控制变量
+ 
+   int32  di;						// 决策变量
+   
+   /* 参数过滤 */
+   if(0==r) return;
+   
+   /* 计算出4个特殊点(0、90、180、270度)，进行显示 */
+   draw_x0 = draw_x1 = x0;
+   draw_y0 = draw_y1 = y0 + r;
+   if(draw_y0<GUI_LCM_YMAX)
+   {  GUI_Point(draw_x0, draw_y0, color);	// 90度
+   }
+    	
+   draw_x2 = draw_x3 = x0;
+   draw_y2 = draw_y3 = y0 - r;
+   if(draw_y2>=0)
+   {  GUI_Point(draw_x2, draw_y2, color);	// 270度
+   }
+  	
+   draw_x4 = draw_x6 = x0 + r;
+   draw_y4 = draw_y6 = y0;
+   if(draw_x4<GUI_LCM_XMAX) 
+   {  GUI_Point(draw_x4, draw_y4, color);	// 0度
+      fill_x1 = draw_x4;
+   }
+   else
+   {  fill_x1 = GUI_LCM_XMAX;
+   }
+   fill_y0 = y0;							// 设置填充线条起始点fill_x0
+   fill_x0 = x0 - r;						// 设置填充线条结束点fill_y1
+   if(fill_x0<0) fill_x0 = 0;
+   GUI_HLine(fill_x0, fill_y0, fill_x1, color);
+   
+   draw_x5 = draw_x7 = x0 - r;
+   draw_y5 = draw_y7 = y0;
+   if(draw_x5>=0) 
+   {  GUI_Point(draw_x5, draw_y5, color);	// 180度
+   }
+   if(1==r) return;
+   
+   
+   /* 使用Bresenham法进行画圆 */
+   di = 3 - 2*r;							// 初始化决策变量
+   
+   xx = 0;
+   yy = r;
+   while(xx<yy)
+   {  if(di<0)
+	  {  di += 4*xx + 6;
+	  }
+	  else
+	  {  di += 4*(xx - yy) + 10;
+	  
+	     yy--;	  
+		 draw_y0--;
+		 draw_y1--;
+		 draw_y2++;
+		 draw_y3++;
+		 draw_x4--;
+		 draw_x5++;
+		 draw_x6--;
+		 draw_x7++;		 
+	  }
+	  
+	  xx++;   
+	  draw_x0++;
+	  draw_x1--;
+	  draw_x2++;
+	  draw_x3--;
+	  draw_y4++;
+	  draw_y5++;
+	  draw_y6--;
+	  draw_y7--;
+		
+	
+	  /* 要判断当前点是否在有效范围内 */
+	  if( (draw_x0<=GUI_LCM_XMAX)&&(draw_y0>=0) )	
+	  {  GUI_Point(draw_x0, draw_y0, color);
+	  }	    
+	  if( (draw_x1>=0)&&(draw_y1>=0) )	
+	  {  GUI_Point(draw_x1, draw_y1, color);
+	  }
+	  
+	  /* 第二点水直线填充(下半圆的点) */
+	  if(draw_x1>=0)
+	  {  /* 设置填充线条起始点fill_x0 */
+	     fill_x0 = draw_x1;
+	     /* 设置填充线条起始点fill_y0 */
+	     fill_y0 = draw_y1;
+         if(fill_y0>GUI_LCM_YMAX) fill_y0 = GUI_LCM_YMAX;
+         if(fill_y0<0) fill_y0 = 0; 
+         /* 设置填充线条结束点fill_x1 */									
+         fill_x1 = x0*2 - draw_x1;				
+         if(fill_x1>GUI_LCM_XMAX) fill_x1 = GUI_LCM_XMAX;
+         GUI_HLine(fill_x0, fill_y0, fill_x1, color);
+      }
+	  
+	  
+	  if( (draw_x2<=GUI_LCM_XMAX)&&(draw_y2<=GUI_LCM_YMAX) )	
+	  {  GUI_Point(draw_x2, draw_y2, color);   
+	  }
+	    	  
+	  if( (draw_x3>=0)&&(draw_y3<=GUI_LCM_YMAX) )	
+	  {  GUI_Point(draw_x3, draw_y3, color);
+	  }
+	  
+	  /* 第四点垂直线填充(上半圆的点) */
+	  if(draw_x3>=0)
+	  {  /* 设置填充线条起始点fill_x0 */
+	     fill_x0 = draw_x3;
+	     /* 设置填充线条起始点fill_y0 */
+	     fill_y0 = draw_y3;
+         if(fill_y0>GUI_LCM_YMAX) fill_y0 = GUI_LCM_YMAX;
+         if(fill_y0<0) fill_y0 = 0;
+         /* 设置填充线条结束点fill_x1 */									
+         fill_x1 = x0*2 - draw_x3;				
+         if(fill_x1>GUI_LCM_XMAX) fill_x1 = GUI_LCM_XMAX;
+         GUI_HLine(fill_x0, fill_y0, fill_x1, color);
+      }
+	  
+	  	  
+	  if( (draw_x4<=GUI_LCM_XMAX)&&(draw_y4>=0) )	
+	  {  GUI_Point(draw_x4, draw_y4, color);
+	  }
+	  if( (draw_x5>=0)&&(draw_y5>=0) )	
+	  {  GUI_Point(draw_x5, draw_y5, color);
+	  }
+	  
+	  /* 第六点垂直线填充(上半圆的点) */
+	  if(draw_x5>=0)
+	  {  /* 设置填充线条起始点fill_x0 */
+	     fill_x0 = draw_x5;
+	     /* 设置填充线条起始点fill_y0 */
+	     fill_y0 = draw_y5;
+         if(fill_y0>GUI_LCM_YMAX) fill_y0 = GUI_LCM_YMAX;
+         if(fill_y0<0) fill_y0 = 0;
+         /* 设置填充线条结束点fill_x1 */									
+         fill_x1 = x0*2 - draw_x5;				
+         if(fill_x1>GUI_LCM_XMAX) fill_x1 = GUI_LCM_XMAX;
+         GUI_HLine(fill_x0, fill_y0, fill_x1, color);
+      }
+	  
+	  
+	  if( (draw_x6<=GUI_LCM_XMAX)&&(draw_y6<=GUI_LCM_YMAX) )	
+	  {  GUI_Point(draw_x6, draw_y6, color);
+	  }
+	  
+	  if( (draw_x7>=0)&&(draw_y7<=GUI_LCM_YMAX) )	
+	  {  GUI_Point(draw_x7, draw_y7, color);
+	  }
+	  
+	  /* 第八点垂直线填充(上半圆的点) */
+	  if(draw_x7>=0)
+	  {  /* 设置填充线条起始点fill_x0 */
+	     fill_x0 = draw_x7;
+	     /* 设置填充线条起始点fill_y0 */
+	     fill_y0 = draw_y7;
+         if(fill_y0>GUI_LCM_YMAX) fill_y0 = GUI_LCM_YMAX;
+         if(fill_y0<0) fill_y0 = 0;
+         /* 设置填充线条结束点fill_x1 */									
+         fill_x1 = x0*2 - draw_x7;				
+         if(fill_x1>GUI_LCM_XMAX) fill_x1 = GUI_LCM_XMAX;
+         GUI_HLine(fill_x0, fill_y0, fill_x1, color);
+      }
+	  
+   }
+}
+
+/****************************************************************************
+* 名称：GUI_Ellipse()
+* 功能：画正椭圆。给定椭圆的四个点的参数，最左、最右点的x轴坐标值为x0、x1，最上、最下点
+*      的y轴坐标为y0、y1。
+* 入口参数： x0		最左点的x坐标值
+*           x1		最右点的x坐标值
+*           y0		最上点的y坐标值
+*           y1      最下点的y坐标值
+*           color	显示颜色
+* 出口参数：无
+* 说明：操作失败原因是指定地址超出有效范围。
+****************************************************************************/
+void  LCD_DrawEllipse(uint32 x0, uint32 x1, uint32 y0, uint32 y1)
+{  int32  draw_x0, draw_y0;			// 刽图点坐标变量
+   int32  draw_x1, draw_y1;
+   int32  draw_x2, draw_y2;
+   int32  draw_x3, draw_y3;
+   int32  xx, yy;					// 画图控制变量
+    
+   int32  center_x, center_y;		// 椭圆中心点坐标变量
+   int32  radius_x, radius_y;		// 椭圆的半径，x轴半径和y轴半径
+   int32  radius_xx, radius_yy;		// 半径乘平方值
+   int32  radius_xx2, radius_yy2;	// 半径乘平方值的两倍
+   int32  di;						// 定义决策变量
+	
+   /* 参数过滤 */
+   if( (x0==x1) || (y0==y1) ) return;
+   	
+   /* 计算出椭圆中心点坐标 */
+   center_x = (x0 + x1) >> 1;			
+   center_y = (y0 + y1) >> 1;
+   
+   /* 计算出椭圆的半径，x轴半径和y轴半径 */
+   if(x0 > x1)
+   {  radius_x = (x0 - x1) >> 1;
+   }
+   else
+   {  radius_x = (x1 - x0) >> 1;
+   }
+   if(y0 > y1)
+   {  radius_y = (y0 - y1) >> 1;
+   }
+   else
+   {  radius_y = (y1 - y0) >> 1;
+   }
+		
+   /* 计算半径平方值 */
+   radius_xx = radius_x * radius_x;
+   radius_yy = radius_y * radius_y;
+	
+   /* 计算半径平方值乘2值 */
+   radius_xx2 = radius_xx<<1;
+   radius_yy2 = radius_yy<<1;
+	
+   /* 初始化画图变量 */
+   xx = 0;
+   yy = radius_y;
+  
+   di = radius_yy2 + radius_xx - radius_xx2*radius_y ;	// 初始化决策变量 
+	
+   /* 计算出椭圆y轴上的两个端点坐标，作为作图起点 */
+   draw_x0 = draw_x1 = draw_x2 = draw_x3 = center_x;
+   draw_y0 = draw_y1 = center_y + radius_y;
+   draw_y2 = draw_y3 = center_y - radius_y;
+  
+	 
+   GUI_Point(draw_x0, draw_y0, color);					// 画y轴上的两个端点 
+   GUI_Point(draw_x2, draw_y2, color);
+	
+   while( (radius_yy*xx) < (radius_xx*yy) ) 
+   {  if(di<0)
+	  {  di+= radius_yy2*(2*xx+3);
+	  }
+	  else
+	  {  di += radius_yy2*(2*xx+3) + 4*radius_xx - 4*radius_xx*yy;
+	 	  
+	     yy--;
+		 draw_y0--;
+		 draw_y1--;
+		 draw_y2++;
+		 draw_y3++;				 
+	  }
+	  
+	  xx ++;						// x轴加1
+	 		
+	  draw_x0++;
+	  draw_x1--;
+	  draw_x2++;
+	  draw_x3--;
+		
+	  GUI_Point(draw_x0, draw_y0, color);
+	  GUI_Point(draw_x1, draw_y1, color);
+	  GUI_Point(draw_x2, draw_y2, color);
+	  GUI_Point(draw_x3, draw_y3, color);
+   }
+  
+   di = radius_xx2*(yy-1)*(yy-1) + radius_yy2*xx*xx + radius_yy + radius_yy2*xx - radius_xx2*radius_yy;
+   while(yy>=0) 
+   {  if(di<0)
+	  {  di+= radius_xx2*3 + 4*radius_yy*xx + 4*radius_yy - 2*radius_xx2*yy;
+	 	  
+	     xx ++;						// x轴加1	 		
+	     draw_x0++;
+	     draw_x1--;
+	     draw_x2++;
+	     draw_x3--;  
+	  }
+	  else
+	  {  di += radius_xx2*3 - 2*radius_xx2*yy;	 	 		     			 
+	  }
+	  
+	  yy--;
+ 	  draw_y0--;
+	  draw_y1--;
+	  draw_y2++;
+	  draw_y3++;	
+		
+	  GUI_Point(draw_x0, draw_y0, color);
+	  GUI_Point(draw_x1, draw_y1, color);
+	  GUI_Point(draw_x2, draw_y2, color);
+	  GUI_Point(draw_x3, draw_y3, color);
+   }     
+}
+
+
+/****************************************************************************
+* 名称：GUI_EllipseFill()
+* 功能：画正椭圆，并填充。给定椭圆的四个点的参数，最左、最右点的x轴坐标值为x0、x1，最上、最下点
+*      的y轴坐标为y0、y1。
+* 入口参数： x0		最左点的x坐标值
+*           x1		最右点的x坐标值
+*           y0		最上点的y坐标值
+*           y1      最下点的y坐标值
+*           color	填充颜色
+* 出口参数：无
+* 说明：操作失败原因是指定地址超出有效范围。
+****************************************************************************/
+void  LCD_FillEllipse(uint32 x0, uint32 x1, uint32 y0, uint32 y1)
+{  int32  draw_x0, draw_y0;			// 刽图点坐标变量
+   int32  draw_x1, draw_y1;
+   int32  draw_x2, draw_y2;
+   int32  draw_x3, draw_y3;
+   int32  xx, yy;					// 画图控制变量
+    
+   int32  center_x, center_y;		// 椭圆中心点坐标变量
+   int32  radius_x, radius_y;		// 椭圆的半径，x轴半径和y轴半径
+   int32  radius_xx, radius_yy;		// 半径乘平方值
+   int32  radius_xx2, radius_yy2;	// 半径乘平方值的两倍
+   int32  di;						// 定义决策变量
+	
+   /* 参数过滤 */
+   if( (x0==x1) || (y0==y1) ) return;
+   
+   /* 计算出椭圆中心点坐标 */
+   center_x = (x0 + x1) >> 1;			
+   center_y = (y0 + y1) >> 1;
+   
+   /* 计算出椭圆的半径，x轴半径和y轴半径 */
+   if(x0 > x1)
+   {  radius_x = (x0 - x1) >> 1;
+   }
+   else
+   {  radius_x = (x1 - x0) >> 1;
+   }
+   if(y0 > y1)
+   {  radius_y = (y0 - y1) >> 1;
+   }
+   else
+   {  radius_y = (y1 - y0) >> 1;
+   }
+		
+   /* 计算半径乘平方值 */
+   radius_xx = radius_x * radius_x;
+   radius_yy = radius_y * radius_y;
+	
+   /* 计算半径乘4值 */
+   radius_xx2 = radius_xx<<1;
+   radius_yy2 = radius_yy<<1;
+   
+    /* 初始化画图变量 */
+   xx = 0;
+   yy = radius_y;
+  
+   di = radius_yy2 + radius_xx - radius_xx2*radius_y ;	// 初始化决策变量 
+	
+   /* 计算出椭圆y轴上的两个端点坐标，作为作图起点 */
+   draw_x0 = draw_x1 = draw_x2 = draw_x3 = center_x;
+   draw_y0 = draw_y1 = center_y + radius_y;
+   draw_y2 = draw_y3 = center_y - radius_y;
+  
+	 
+   GUI_Point(draw_x0, draw_y0, color);					// 画y轴上的两个端点
+   GUI_Point(draw_x2, draw_y2, color);
+	
+   while( (radius_yy*xx) < (radius_xx*yy) ) 
+   {  if(di<0)
+	  {  di+= radius_yy2*(2*xx+3);
+	  }
+	  else
+	  {  di += radius_yy2*(2*xx+3) + 4*radius_xx - 4*radius_xx*yy;
+	 	  
+	     yy--;
+		 draw_y0--;
+		 draw_y1--;
+		 draw_y2++;
+		 draw_y3++;				 
+	  }
+	  
+	  xx ++;						// x轴加1
+	 		
+	  draw_x0++;
+	  draw_x1--;
+	  draw_x2++;
+	  draw_x3--;
+		
+	  GUI_Point(draw_x0, draw_y0, color);
+	  GUI_Point(draw_x1, draw_y1, color);
+	  GUI_Point(draw_x2, draw_y2, color);
+	  GUI_Point(draw_x3, draw_y3, color);
+	  
+	  /* 若y轴已变化，进行填充 */
+	  if(di>=0)
+	  {  GUI_HLine(draw_x0, draw_y0, draw_x1, color);
+	     GUI_HLine(draw_x2, draw_y2, draw_x3, color);
+	  }
+   }
+  
+   di = radius_xx2*(yy-1)*(yy-1) + radius_yy2*xx*xx + radius_yy + radius_yy2*xx - radius_xx2*radius_yy;
+   while(yy>=0) 
+   {  if(di<0)
+	  {  di+= radius_xx2*3 + 4*radius_yy*xx + 4*radius_yy - 2*radius_xx2*yy;
+	 	  
+	     xx ++;						// x轴加1	 		
+	     draw_x0++;
+	     draw_x1--;
+	     draw_x2++;
+	     draw_x3--;  
+	  }
+	  else
+	  {  di += radius_xx2*3 - 2*radius_xx2*yy;	 	 		     			 
+	  }
+	  
+	  yy--;
+ 	  draw_y0--;
+	  draw_y1--;
+	  draw_y2++;
+	  draw_y3++;	
+		
+	  GUI_Point(draw_x0, draw_y0, color);
+	  GUI_Point(draw_x1, draw_y1, color);
+	  GUI_Point(draw_x2, draw_y2, color);
+	  GUI_Point(draw_x3, draw_y3, color);
+	  
+	  /* y轴已变化，进行填充 */
+	  GUI_HLine(draw_x0, draw_y0, draw_x1, color);
+	  GUI_HLine(draw_x2, draw_y2, draw_x3, color); 
+   }     
+}
+
+void  LCD_DrawArc(uint32 x, uint32 y, uint32 r, uint32 stangle, uint32 endangle)
+{  int32  draw_x, draw_y;					// 画图坐标变量
+   int32  op_x, op_y;						// 操作坐标
+   int32  op_2rr;							// 2*r*r值变量
+   
+   int32  pno_angle;						// 度角点的个数
+   uint8  draw_on;							// 画点开关，为1时画点，为0时不画
+   
+   
+   /* 参数过滤 */
+   if(r==0) return;							// 半径为0则直接退出
+   if(stangle==endangle) return;			// 起始角度与终止角度相同，退出
+   if( (stangle>=360) || (endangle>=360) ) return;
+
+   op_2rr = 2*r*r;							// 计算r平方乖以2
+   pno_angle = 0;
+   /* 先计算出在此半径下的45度的圆弧的点数 */       
+   op_x = r;
+   op_y = 0;
+   while(1)
+   {  pno_angle++; 							// 画点计数         
+      /* 计算下一点 */
+      op_y++;
+      if( (2*op_x*op_x + 2*op_y*op_y - op_2rr - 2*op_x +1)>0 ) 	// 使用逐点比较法实现画圆弧
+      {  op_x--;
+      }
+      if(op_y>=op_x) break;
+   }
+   
+   draw_on = 0;								// 最开始关画点开关
+   /* 设置起始点及终点 */
+   if(endangle>stangle) draw_on = 1;		// 若终点大于起点，则从一开始即画点(359)
+   stangle = (360-stangle)*pno_angle/45;
+   endangle = (360-endangle)*pno_angle/45;
+   if(stangle==0) stangle=1;
+   if(endangle==0) endangle=1;
+   
+   /* 开始顺时针画弧，从359度开始(第4像限) */
+   pno_angle = 0;
+   
+   draw_x = x+r;
+   draw_y = y;         
+   op_x = r;
+   op_y = 0;
+   while(1)
+   {  /* 计算下一点 */
+      op_y++;
+      draw_y--;
+      if( (2*op_x*op_x + 2*op_y*op_y - op_2rr - 2*op_x +1)>0 ) 	// 使用逐点比较法实现画圆弧
+      {  op_x--;
+         draw_x--;
+      }
+      if(draw_on==1) GUI_Point(draw_x, draw_y, color);			// 开始画图
+      pno_angle++;
+      if( (pno_angle==stangle)||(pno_angle==endangle) )			// 若遇到起点或终点，画点开关取反
+      {  draw_on = 1-draw_on;
+         if(draw_on==1) GUI_Point(draw_x, draw_y, color);
+      } 
+      if(op_y>=op_x)
+      {  if(draw_on==1) GUI_Point(draw_x, draw_y, color);
+         break;
+      }
+   }
+   
+   while(1)
+   {  /* 计算下一点 */
+      op_x--;
+      draw_x--;
+      if( (2*op_x*op_x + 2*op_y*op_y - op_2rr + 2*op_y +1)<=0 ) // 使用逐点比较法实现画圆弧
+      {  op_y++;
+         draw_y--;
+      }
+      if(draw_on==1) GUI_Point(draw_x, draw_y, color);			// 开始画图
+      pno_angle++;
+      if( (pno_angle==stangle)||(pno_angle==endangle) )			// 若遇到起点或终点，画点开关取反
+      {  draw_on = 1-draw_on;
+         if(draw_on==1) GUI_Point(draw_x, draw_y, color);
+      } 
+      
+      if(op_x<=0)
+      {  if(draw_on==1) GUI_Point(draw_x, draw_y, color);		// 开始画图
+         break;
+      }
+   }
+    
+    
+   /* 开始顺时针画弧，从269度开始(第3像限) */
+   draw_y = y-r;
+   draw_x = x;         
+   op_y = r;
+   op_x = 0;
+   while(1)
+   {  /* 计算下一点 */
+      op_x++;
+      draw_x--;
+      if( (2*op_x*op_x + 2*op_y*op_y - op_2rr - 2*op_y +1)>0 ) // 使用逐点比较法实现画圆弧
+      {  op_y--;
+         draw_y++;
+      }
+      if(draw_on==1) GUI_Point(draw_x, draw_y, color);			// 开始画图
+      pno_angle++;
+      if( (pno_angle==stangle)||(pno_angle==endangle) )			// 若遇到起点或终点，画点开关取反
+      {  draw_on = 1-draw_on;
+         if(draw_on==1) GUI_Point(draw_x, draw_y, color);
+      } 
+      
+      if(op_x>=op_y)
+      {  if(draw_on==1) GUI_Point(draw_x, draw_y, color);		// 开始画图
+         break;
+      }
+   }
+   
+   while(1)
+   {  /* 计算下一点 */
+      op_y--;
+      draw_y++;
+      if( (2*op_x*op_x + 2*op_y*op_y - op_2rr + 2*op_x +1)<=0 ) // 使用逐点比较法实现画圆弧
+      {  op_x++;
+         draw_x--;
+      }
+      if(draw_on==1) GUI_Point(draw_x, draw_y, color);			// 开始画图
+      pno_angle++;
+      if( (pno_angle==stangle)||(pno_angle==endangle) )			// 若遇到起点或终点，画点开关取反
+      {  draw_on = 1-draw_on;
+         if(draw_on==1) GUI_Point(draw_x, draw_y, color);
+      } 
+      if(op_y<=0)
+      {  if(draw_on==1) GUI_Point(draw_x, draw_y, color);
+         break;
+      }
+   }
+   
+   
+   /* 开始顺时针画弧，从179度开始(第2像限) */
+   draw_x = x-r;
+   draw_y = y;         
+   op_x = r;
+   op_y = 0;
+   while(1)
+   {  /* 计算下一点 */
+      op_y++;
+      draw_y++;
+      if( (2*op_x*op_x + 2*op_y*op_y - op_2rr - 2*op_x +1)>0 ) 	// 使用逐点比较法实现画圆弧
+      {  op_x--;
+         draw_x++;
+      }
+      if(draw_on==1) GUI_Point(draw_x, draw_y, color);			// 开始画图
+      pno_angle++;
+      if( (pno_angle==stangle)||(pno_angle==endangle) )			// 若遇到起点或终点，画点开关取反
+      {  draw_on = 1-draw_on;
+         if(draw_on==1) GUI_Point(draw_x, draw_y, color);
+      } 
+      if(op_y>=op_x)
+      {  if(draw_on==1) GUI_Point(draw_x, draw_y, color);
+         break;
+      }
+   }
+   
+   while(1)
+   {  /* 计算下一点 */
+      op_x--;
+      draw_x++;
+      if( (2*op_x*op_x + 2*op_y*op_y - op_2rr + 2*op_y +1)<=0 ) // 使用逐点比较法实现画圆弧
+      {  op_y++;
+         draw_y++;
+      }
+      if(draw_on==1) GUI_Point(draw_x, draw_y, color);			// 开始画图
+      pno_angle++;
+      if( (pno_angle==stangle)||(pno_angle==endangle) )			// 若遇到起点或终点，画点开关取反
+      {  draw_on = 1-draw_on;
+         if(draw_on==1) GUI_Point(draw_x, draw_y, color);
+      } 
+      
+      if(op_x<=0)
+      {  if(draw_on==1) GUI_Point(draw_x, draw_y, color);		// 开始画图
+         break;
+      }
+   }
+  
+  
+   /* 开始顺时针画弧，从89度开始(第1像限) */
+   draw_y = y+r;
+   draw_x = x;         
+   op_y = r;
+   op_x = 0;
+   while(1)
+   {  /* 计算下一点 */
+      op_x++;
+      draw_x++;
+      if( (2*op_x*op_x + 2*op_y*op_y - op_2rr - 2*op_y +1)>0 ) // 使用逐点比较法实现画圆弧
+      {  op_y--;
+         draw_y--;
+      }
+      if(draw_on==1) GUI_Point(draw_x, draw_y, color);			// 开始画图
+      pno_angle++;
+      if( (pno_angle==stangle)||(pno_angle==endangle) )			// 若遇到起点或终点，画点开关取反
+      {  draw_on = 1-draw_on;
+         if(draw_on==1) GUI_Point(draw_x, draw_y, color);
+      } 
+      
+      if(op_x>=op_y)
+      {  if(draw_on==1) GUI_Point(draw_x, draw_y, color);		// 开始画图
+         break;
+      }
+   }
+   
+   while(1)
+   {  /* 计算下一点 */
+      op_y--;
+      draw_y--;
+      if( (2*op_x*op_x + 2*op_y*op_y - op_2rr + 2*op_x +1)<=0 ) // 使用逐点比较法实现画圆弧
+      {  op_x++;
+         draw_x++;
+      }
+      if(draw_on==1) GUI_Point(draw_x, draw_y, color);			// 开始画图
+      pno_angle++;
+      if( (pno_angle==stangle)||(pno_angle==endangle) )			// 若遇到起点或终点，画点开关取反
+      {  draw_on = 1-draw_on;
+         if(draw_on==1) GUI_Point(draw_x, draw_y, color);
+      } 
+      if(op_y<=0)
+      {  if(draw_on==1) GUI_Point(draw_x, draw_y, color);
+         break;
+      }
+   }
+   
+}
+
+//-----------------------------------------------------------------------------//
+
+/* 定义十进制(0-7)==>十六进制位转换表，由于显示点数据是由左到右，所以十六进制位顺序是倒的 */
+#if 0
+uint8 const  DCB2HEX_TAB[8] = {0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01};
+
+uint8  GUI_LoadLine(uint32 x, uint32 y, uint8 *dat, uint32 no)
+{  uint8   bit_dat;
+   uint8   i;
+   TCOLOR  bakc;
+
+   /* 参数过滤 */
+   if(x>=GUI_LCM_XMAX) return(0);
+   if(y>=GUI_LCM_YMAX) return(0);
+   
+   for(i=0; i<no; i++)
+   {  /* 判断是否要读取点阵数据 */
+      if( (i%8)==0 ) bit_dat = *dat++;
+     
+      /* 设置相应的点为color或为back_color */
+      if( (bit_dat&DCB2HEX_TAB[i&0x07])==0 ) 
+	GUI_CopyColor(&bakc, back_color); 
+      else  GUI_CopyColor(&bakc, disp_color);
+      GUI_Point(x, y, bakc);       
+     
+      if( (++x)>=GUI_LCM_XMAX ) return(0);
+   }
+   
+   return(1);
+}
+
+/****************************************************************************
+* 名称：GUI_LoadPic()
+* 功能：输出单色图形数据。
+* 入口参数： x		指定显示位置，x坐标
+*           y		指定显示位置，y坐标
+*           dat		要输出显示的数据
+*           hno     要显示此行的点个数
+*           lno     要显示此列的点个数
+* 出口参数：无
+* 说明：操作失败原因是指定地址超出有效范围。
+****************************************************************************/
+void  GUI_LoadPic(uint32 x, uint32 y, uint8 *dat, uint32 hno, uint32 lno)
+{  uint32  i;
+
+   for(i=0; i<lno; i++)
+   {  GUI_LoadLine(x, y, dat, hno);				// 输出一行数据
+      y++;										// 显示下一行
+      dat += (hno>>3);							// 计算下一行的数据
+      if( (hno&0x07)!=0 ) dat++;
+   }
+}
+
+#endif
+
+//--------------------------------------------------------------------//
+
+
+
 //在指定位置显示一个字符
 
 //num:要显示的字符:" "--->"~"
@@ -362,6 +1190,10 @@ void LCD_DrawCircle(u16 x0,u16 y0,u8 r)
 //num:要显示的字符:" "--->"~"
 
 //mode:叠加方式(1)还是非叠加方式(0)
+
+uint8 const  DCB2HEX_TAB[8] = {0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01};
+
+
 void LCD_ShowChar(u16 x,u16 y,u8 num,u8 mode)
 {
 	u8 temp;
@@ -369,23 +1201,24 @@ void LCD_ShowChar(u16 x,u16 y,u8 num,u8 mode)
 	u32  i = 0;
 	u16 color;
 
-#define FONT_WIDTH   (8)
-#define FONT_HEIGHT   (16)
+	if(x>LCD_W-g_font_width || y>LCD_H-g_font_height) return;    
+	if( (num<0x20) || (num>0x7f) ) num = 0x20;
 
-	if(x>LCD_W-16||y>LCD_H-16)return;    
 	//设置窗口   
 	num=num-' ';//得到偏移后的值
-	address_set(x,y,x+FONT_WIDTH-1,y+FONT_HEIGHT-1);      //设置光标位置 
+	address_set(x,y,x+g_font_width-1,y+g_font_height-1);      //设置光标位置 
 
 	if(!mode) //非叠加方式
 	{
-		for(pos=0;pos<FONT_HEIGHT;pos++)
+		for(pos=0;pos<g_font_height;pos++)
 		{ 
-			temp=asc2_1608[(u16)num*FONT_HEIGHT+pos]; //调用1608字体
-			for(t=0;t<FONT_WIDTH;t++)
+			temp = g_font_data[(u16)num*g_font_height*g_font_byteperline+pos]; 
+			for(t=0;t<g_font_width;t++)
 			{                 
-				if(temp&0x01)color = g_foreground_color;
-				else color = g_background_color;
+				if(temp & 0x01)
+					color = g_foreground_color;
+				else 
+					color = g_background_color;
 
 				paint_device->frame_buff[i++] = COLOR_CC(color);
 				temp>>=1; 
@@ -394,10 +1227,10 @@ void LCD_ShowChar(u16 x,u16 y,u8 num,u8 mode)
 		write_data((u8 *)paint_device->frame_buff, i<<1);
 	}else//叠加方式
 	{
-		for(pos=0;pos<FONT_HEIGHT;pos++)
+		for(pos=0;pos<g_font_height;pos++)
 		{
-			temp=asc2_1608[(u16)num*FONT_HEIGHT+pos]; //调用1608字体
-			for(t=0;t<FONT_WIDTH;t++)
+			temp = g_font_data[(u16)num*g_font_height*g_font_byteperline+pos]; 
+			for(t=0;t<g_font_width;t++)
 			{                 
 				if(temp&0x01)LCD_DrawPoint(x+t,y+pos);//画一个点     
 					temp>>=1; 
@@ -405,49 +1238,7 @@ void LCD_ShowChar(u16 x,u16 y,u8 num,u8 mode)
 		}
 	}
 }   
-//m^n函数
-u32 mypow(u8 m,u8 n)
-{
-	u32 result=1; 
-	while(n--)result*=m;    
-	return result;
-} 
-//显示2个数字
-//x,y :起点坐标 
-//len :数字的位数
-//color:颜色
-//num:数值(0~4294967295);
-void LCD_ShowNum(u16 x,u16 y,u32 num,u8 len)
-{			
-	u8 t,temp;
-	u8 enshow=0;
-	num=(u16)num;
-	for(t=0;t<len;t++)
-	{
-		temp=(num/mypow(10,len-t-1))%10;
-		if(enshow==0&&t<(len-1))
-		{
-			if(temp==0)
-			{
-			LCD_ShowChar(x+8*t,y,' ',0);
-			continue;
-			}else enshow=1; 
-		}
-		LCD_ShowChar(x+8*t,y,temp+48,0); 
-	}
-} 
-//显示2个数字
-//x,y:起点坐标
-//num:数值(0~99); 
-void LCD_Show2Num(u16 x,u16 y,u16 num,u8 len)
-{			
-	u8 t,temp;   
-	for(t=0;t<len;t++)
-	{
-		temp=(num/mypow(10,len-t-1))%10;
-		LCD_ShowChar(x+8*t,y,temp+'0',0); 
-	}
-} 
+
 //显示字符串
 //x,y:起点坐标  
 //*p:字符串起始地址
@@ -456,10 +1247,16 @@ void LCD_ShowString(u16 x,u16 y,const u8 *p)
 {         
 	while(*p!='\0')
 	{       
-		if(x>LCD_W-16){x=0;y+=16;}
-		if(y>LCD_H-16){y=x=0;}
+		if(x>LCD_W-g_font_width)
+		{
+			x=0;y+=g_font_height;
+		}
+		if(y>LCD_H-g_font_height)
+		{
+			y=x=0;
+		}
 		LCD_ShowChar(x,y,*p,0);
-		x+=8;
+		x+=g_font_width;
 		p++;
 	}  
 }
