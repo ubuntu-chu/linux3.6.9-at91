@@ -28,27 +28,28 @@ typedef short int				int16;
 typedef unsigned char			uint8;
 typedef char					int8;
 
-struct font{
-	uint8        *data;
-	uint8       width;
-	uint8       height;
-	uint8       byteperline;
-};
-typedef struct font  GUI_FONT; 
+#define WHITE				 0xFFFF
+#define BLACK				 0  
+#define BLUE			 0x001F  
+#define BRED             0XF81F
+#define GRED			 0XFFE0
+#define GBLUE				0X07FF
+#define RED				 0xF800
+#define MAGENTA			 0xF81F
+#define GREEN				 0x07E0
+#define CYAN				 0x7FFF
+#define YELLOW			 0xFFE0
+#define BROWN				 0XBC40 //棕色
+#define BRRED				 0XFC07 //棕红色
+#define GRAY				 0X8430 //灰色
+#define DARKBLUE			 0X01CF//深蓝色
+#define LIGHTBLUE			 0X7D7C//浅蓝色  
+#define GRAYBLUE			 0X5458 //灰蓝色
+#define LIGHTGREEN		 0X841F //浅绿色
+#define LGRAY			 0XC618 //浅灰色(PANNEL),窗体背景色
 
-#define  GUI_CONST_STORAGE
-#define  GUI_DRAW_BMPM565   0
-
-struct bitmap{
-	uint16		x_size;
-	uint16		y_size;
-	uint16		bytesperline;
-	uint16		bitsperPixel;
-	uint8		*data;
-	uint8		*palette;
-	uint8		*methods;
-};
-typedef struct bitmap  GUI_BITMAP; 
+#define LGRAYBLUE        0XA651 //浅灰蓝色(中间层颜色)
+#define LBBLUE           0X2B12 //浅棕蓝色(选择条目的反色)
 
 enum{
 	NR_INIT = 0,
@@ -58,7 +59,6 @@ enum{
 	NR_CLEAR,
 	NR_DRAW_POINT,
 	NR_DRAW_LINE,
-	NR_CLEAR_RECTANGLE,
 	NR_DRAW_RECTANGLE,
 	NR_FILL_RECTANGLE,
 	NR_SHOW_STRING,
@@ -67,24 +67,16 @@ enum{
 	NR_DRAW_ELLIPSE,
 	NR_FILL_ELLIPSE,
 	NR_DRAW_ARC,
-	//NR_DISPLAY_ON,
-	//NR_DISPLAY_OFF,
+	NR_DISPLAY_ON,
+	NR_DISPLAY_OFF,
 	NR_SET_FONT,
 	NR_DRAW_BITMAP,
 	NR_BACKLIGHT_ON,
 	NR_BACKLIGHT_OFF,
-	NR_LCD_INFO,
 
 
 	NR_IOC_MAX,
 };
-struct lcd_info
-{
-	uint32			m_width;
-	uint32			m_height;
-	uint32			m_bpp;
-};
-
 struct color
 {
 	uint16		m_color;
@@ -111,9 +103,9 @@ struct arc
 {                                                        
 	uint16		m_x;
 	uint16		m_y;
-	uint16		m_r;
-	uint16		m_stangle;
-	uint16		m_endangle;
+	u1nt16		m_r;
+	u1nt16		m_stangle;
+	u1nt16		m_endangle;
 };
 
 /* 定义命令 */
@@ -121,21 +113,17 @@ struct arc
 #define ST7735IOC_UNINIT		_IO(ST7735IOC_MAGIC, NR_UNINT)
 #define ST7735IOC_BACKLIGHT_ON	_IO(ST7735IOC_MAGIC, NR_BACKLIGHT_ON)
 #define ST7735IOC_BACKLIGHT_OFF	_IO(ST7735IOC_MAGIC, NR_BACKLIGHT_OFF)
-//#define ST7735IOC_DISPLAY_ON	_IO(ST7735IOC_MAGIC, NR_DISPLAY_ON)
-//#define ST7735IOC_DISPLAY_OFF	_IO(ST7735IOC_MAGIC, NR_DISPLAY_OFF)
+#define ST7735IOC_DISPLAY_ON	_IO(ST7735IOC_MAGIC, NR_DISPLAY_ON)
+#define ST7735IOC_DISPLAY_OFF	_IO(ST7735IOC_MAGIC, NR_DISPLAY_OFF)
 #define ST7735IOC_SET_FOREGROUND_COLOR	_IOW(ST7735IOC_MAGIC, \
 									NR_SET_FOREGROUND_COLOR, struct color)
 #define ST7735IOC_SET_BACKGROUND_COLOR	_IOW(ST7735IOC_MAGIC, \
 									NR_SET_BACKGROUND_COLOR, struct color)
 #define ST7735IOC_CLEAR			_IO(ST7735IOC_MAGIC, NR_CLEAR)
-#define ST7735IOC_LCD_INFO	_IOR(ST7735IOC_MAGIC, \
-											NR_LCD_INFO, struct lcd_info)
 #define ST7735IOC_DRAW_POINT	_IOW(ST7735IOC_MAGIC, \
 									NR_DRAW_POINT, struct coordinate)
 #define ST7735IOC_DRAW_LINE	_IOW(ST7735IOC_MAGIC, \
 									NR_DRAW_LINE, struct coordinate_pair)
-#define ST7735IOC_CLEAR_RECTANGLE	_IOW(ST7735IOC_MAGIC, \
-									NR_CLEAR_RECTANGLE, struct coordinate_pair)
 #define ST7735IOC_DRAW_RECTANGLE	_IOW(ST7735IOC_MAGIC, \
 									NR_DRAW_RECTANGLE, struct coordinate_pair)
 #define ST7735IOC_FILL_RECTANGLE	_IOW(ST7735IOC_MAGIC, \
@@ -148,8 +136,6 @@ struct arc
 									NR_DRAW_ELLIPSE, struct coordinate_pair)
 #define ST7735IOC_FILL_ELLIPSE	_IOW(ST7735IOC_MAGIC, \
 									NR_FILL_ELLIPSE, struct coordinate_pair)
-#define ST7735IOC_DRAW_ARC		_IOW(ST7735IOC_MAGIC, \
-									NR_DRAW_ARC, struct arc)
 
 
 

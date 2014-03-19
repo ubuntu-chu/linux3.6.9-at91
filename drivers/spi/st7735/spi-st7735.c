@@ -12,7 +12,7 @@
  * The driver exports two uarts and a gpiochip interface.
  */
 
-#include "st7735.h"
+#include "includes.h"
 
 struct class  *dev_class	= NULL;  
 struct device *dev_device	= NULL; 
@@ -320,27 +320,9 @@ int st7735_open(struct inode *inode, struct file *filp)
 		atomic_inc(&(sc->open_cnt));  
 		return -EACCES;  
 	}
-
-	foreground_color_set(YELLOW);	
-	background_color_set(WHITE);	
+	background_color_set(YELLOW);	
+	foreground_color_set(BLACK);	
 	lcd_init();
-	background_color_set(RED);	
-	LCD_Clear();
-	BACKLIGHT_PIN_ON();
-	//LCD_DrawLine(0, 0, 160, 128);
-	LCD_DrawLine(160, 120, 60, 28);
-	LCD_DrawLine(10, 100, 10, 28);
-	//LCD_DrawLine(0, 10, 160, 10);
-	LCD_DrawLine(160, 10, 100, 10);
-	//LCD_DrawCircle(50, 50, 10);
-	LCD_FillCircle(50, 50, 10);
-	LCD_DrawArc(130, 60, 20, 30, 90);
-	LCD_DrawEllipse(110, 130, 45, 90);
-	LCD_ShowString(0, 0, "hello st7735 ----HHHHHHHHHHHHHHHHHH--");
-	//LCD_ShowChar(0, 0, 'h', 0);
-//	LCD_Fill(0, 0, 40, 20);
-	//LCD_DrawRectangle(0, 0, 40, 20);
-	LCD_DrawRectangle(80, 80, 40, 20);
 
 	return nonseekable_open(inode, filp);
 } 
@@ -357,11 +339,201 @@ int st7735_release(struct inode *inode, struct file *filp)
 	return 0;  
 }  
 
+const struct lcd_info t_lcd_info_st7735 = {
+	LCD_W,
+	LCD_H,
+	16,
+};
+
 long st7735_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
+	struct st7735_chip *sc = filp->private_data;
+	int err = 0;
+	int ret = 0;
 
+	/* 检测命令的有效性 */
+	if (_IOC_TYPE(cmd) != ST7735IOC_MAGIC) 
+		return -EINVAL;
+	if (_IOC_NR(cmd) > NR_IOC_MAX) 
+		return -EINVAL;
 
-	return 0;
+	/* 根据命令类型，检测参数空间是否可以访问 */
+	if (_IOC_DIR(cmd) & _IOC_READ)
+		err = !access_ok(VERIFY_WRITE, (void *)arg, _IOC_SIZE(cmd));
+	else if (_IOC_DIR(cmd) & _IOC_WRITE)
+		err = !access_ok(VERIFY_READ, (void *)arg, _IOC_SIZE(cmd));
+	if (err) 
+		return -EFAULT;
+
+	mutex_lock(&sc->mutex);
+	switch(cmd) {
+		case ST7735IOC_INIT:
+			lcd_init();
+			break;
+		case ST7735IOC_UNINIT:
+			break;
+		case ST7735IOC_LCD_INFO:
+			if (copy_to_user((void *)arg, &t_lcd_info_st7735, 
+						sizeof(struct lcd_info))){  
+				ret =  -EFAULT;  
+				break;
+			}
+			break;
+		case ST7735IOC_SET_FOREGROUND_COLOR:
+			{
+				struct color t_color;
+				if (copy_from_user(&t_color, (struct color *)arg, 
+							sizeof(struct color))){  
+					ret =  -EFAULT;  
+					break;
+				}
+				foreground_color_set(t_color.m_color);	
+				//printk("color = 0x%x\n", t_color.m_color);
+			}
+			break;
+		case ST7735IOC_SET_BACKGROUND_COLOR:
+			{
+				struct color t_color;
+				if (copy_from_user(&t_color, (struct color *)arg, 
+							sizeof(struct color))){  
+					ret =  -EFAULT;  
+					break;
+				}
+				background_color_set(t_color.m_color);	
+				//printk("back color = 0x%x\n", t_color.m_color);
+			}
+			break;
+		case ST7735IOC_CLEAR:
+			LCD_Clear();
+			break;
+		case ST7735IOC_BACKLIGHT_ON:
+			BACKLIGHT_PIN_ON();
+			break;
+		case ST7735IOC_BACKLIGHT_OFF:
+			BACKLIGHT_PIN_OFF();
+			break;
+		case ST7735IOC_DRAW_POINT:
+			{
+				struct coordinate t_coordinate;
+				if (copy_from_user(&t_coordinate, (struct coordinate *)arg, 
+							sizeof(struct coordinate))){  
+					ret =  -EFAULT;  
+					break;
+				}
+				coordinate_check(&t_coordinate);
+				LCD_DrawPoint(t_coordinate.m_x, t_coordinate.m_y);
+			}
+			break;
+		case ST7735IOC_DRAW_LINE:
+			{
+				struct coordinate_pair t_coordinate_pair;
+				if (copy_from_user(&t_coordinate_pair, 
+							(struct coordinate_pair *)arg, 
+							sizeof(struct coordinate_pair))){  
+					ret =  -EFAULT;  
+					break;
+				}
+				coordinate_pair_check(&t_coordinate_pair);
+				LCD_DrawLine(t_coordinate_pair.m_x1, t_coordinate_pair.m_y1,
+						t_coordinate_pair.m_x2, t_coordinate_pair.m_y2);
+			}
+			break;
+		case ST7735IOC_DRAW_RECTANGLE:
+		case ST7735IOC_FILL_RECTANGLE:
+		case ST7735IOC_CLEAR_RECTANGLE:
+			{
+				struct coordinate_pair t_coordinate_pair;
+				if (copy_from_user(&t_coordinate_pair, 
+							(struct coordinate_pair *)arg, 
+							sizeof(struct coordinate_pair))){  
+					ret =  -EFAULT;  
+					break;
+				}
+				coordinate_pair_check(&t_coordinate_pair);
+				if (cmd == ST7735IOC_DRAW_RECTANGLE){
+					LCD_DrawRectangle(t_coordinate_pair.m_x1, 
+							t_coordinate_pair.m_y1, t_coordinate_pair.m_x2, 
+							t_coordinate_pair.m_y2);
+				}else if (cmd == ST7735IOC_CLEAR_RECTANGLE){
+					LCD_ClearRectangle(t_coordinate_pair.m_x1, 
+							t_coordinate_pair.m_y1, t_coordinate_pair.m_x2, 
+							t_coordinate_pair.m_y2);
+				}else {
+					LCD_FillRectangle(t_coordinate_pair.m_x1, 
+							t_coordinate_pair.m_y1, t_coordinate_pair.m_x2, 
+							t_coordinate_pair.m_y2);
+				}
+			}
+			break;
+			/*
+		case ST7735IOC_SHOW_STRING:
+			break;
+			*/
+		case ST7735IOC_DRAW_CIRCLE:
+		case ST7735IOC_FILL_CIRCLE:
+			{
+				struct circle t_circle;
+				if (copy_from_user(&t_circle, 
+							(struct circle *)arg, 
+							sizeof(struct circle))){  
+					ret =  -EFAULT;  
+					break;
+				}
+				if (cmd == ST7735IOC_DRAW_CIRCLE){
+					LCD_DrawCircle(t_circle.m_x, t_circle.m_y, t_circle.m_r);
+				}else {
+					LCD_FillCircle(t_circle.m_x, t_circle.m_y, t_circle.m_r);
+				}
+			}
+			break;
+		case ST7735IOC_DRAW_ELLIPSE:
+		case ST7735IOC_FILL_ELLIPSE:
+			{
+				struct coordinate_pair t_coordinate_pair;
+				if (copy_from_user(&t_coordinate_pair, 
+							(struct coordinate_pair *)arg, 
+							sizeof(struct coordinate_pair))){  
+					ret =  -EFAULT;  
+					break;
+				}
+				coordinate_pair_check(&t_coordinate_pair);
+				if (cmd == ST7735IOC_DRAW_ELLIPSE){
+					LCD_DrawEllipse(t_coordinate_pair.m_x1, 
+							t_coordinate_pair.m_y1, t_coordinate_pair.m_x2, 
+							t_coordinate_pair.m_y2);
+				}else {
+					LCD_FillEllipse(t_coordinate_pair.m_x1, 
+							t_coordinate_pair.m_y1, t_coordinate_pair.m_x2, 
+							t_coordinate_pair.m_y2);
+				}
+			}
+			break;
+		case ST7735IOC_DRAW_ARC:
+			{
+				struct arc t_arc;
+				if (copy_from_user(&t_arc, 
+							(struct arc *)arg, 
+							sizeof(struct arc))){  
+					ret =  -EFAULT;  
+					break;
+				}
+				LCD_DrawArc(t_arc.m_x, t_arc.m_y, t_arc.m_r, t_arc.m_stangle, 
+						t_arc.m_endangle);
+			}
+			break;
+			/*
+		case ST7735IOC_SET_FONT:
+			break;
+		case ST7735IOC_DRAW_BITMAP:
+			break;
+			*/
+		default:
+			ret		= -EINVAL;
+			break;
+	}
+	mutex_unlock(&sc->mutex);
+
+	return ret;
 }
 
 struct file_operations st7735_fops = {

@@ -12,7 +12,7 @@
  * The driver exports two uarts and a gpiochip interface.
  */
 
-#include "st7735.h"
+#include "includes.h"
 
 
 u16 g_foreground_color = 0x0000;
@@ -207,7 +207,7 @@ void lcd_init(void)
 	write_data8(0x13);
 	//----------------End ST7735S Gamma Sequence------------------//
 	write_reg_addr(0x3A); //65k mode
-	write_data8(0x05);
+	write_data8(0x55);
 	LCD_DisplayOn();
 
 	font_set(&t_font8x16);
@@ -225,14 +225,10 @@ void LCD_DisplayOff(void){
 //Color:要清屏的填充色
 void LCD_Clear(void)
 {
-	u32   i;
-	u16   cc = COLOR_CC(g_background_color);
+	u16   cc = foreground_color_set(g_background_color);
 
-	address_set(0,0,LCD_W-1,LCD_H-1);
-	for (i = 0; i < LCD_FRAME_BUFF_SIZE/sizeof(u16); ++i){
-		paint_device->frame_buff[i] = cc;
-	}
-	write_data((u8 *)paint_device->frame_buff, LCD_FRAME_BUFF_SIZE);
+	LCD_FillRectangle(0,0,LCD_W-1,LCD_H-1);
+	foreground_color_set(cc);
 }
 
 //画点
@@ -246,18 +242,36 @@ void LCD_DrawPoint(u16 x,u16 y)
 //在指定区域内填充指定颜色
 //区域大小:
 //  (xend-xsta)*(yend-ysta)
-void LCD_Fill(u16 xsta,u16 ysta,u16 xend,u16 yend)
+void LCD_FillRectangle(u16 xsta,u16 ysta,u16 xend,u16 yend)
 {          
-	u16 i,j; 
+	u16 i,j, t; 
 	u32 z = 0;
 	u16   cc = COLOR_CC(g_foreground_color);
 
+	if (ysta > yend){
+		t		= ysta;
+		ysta		= yend;
+		yend		= t;
+	}
+	if (xsta > xend){
+		t		= xsta;
+		xsta		= xend;
+		xend		= t;
+	}
 	address_set(xsta,ysta,xend,yend);
 	for(i=ysta;i<=yend;i++) {			
 		for(j=xsta;j<=xend;j++)
 			paint_device->frame_buff[z++] = cc;
 	}							    
 	write_data((u8 *)paint_device->frame_buff, z<<1);
+}  
+
+void LCD_ClearRectangle(u16 xsta,u16 ysta,u16 xend,u16 yend)
+{          
+	u16   cc = foreground_color_set(g_background_color);
+
+	LCD_FillRectangle(xsta, ysta, xend, yend);
+	foreground_color_set(cc);
 }  
 
 #define GUI_HLine(x1, y1, x2, color)  LCD_DrawLine(x1,y1,x2,y1)
@@ -267,9 +281,9 @@ void LCD_Fill(u16 xsta,u16 ysta,u16 xend,u16 yend)
 //x2,y2:终点坐标  
 void LCD_DrawLine(u16 x1, u16 y1, u16 x2, u16 y2)
 {
-	u16 t; 
 	int xerr=0,yerr=0,delta_x,delta_y,distance; 
 	int incx,incy,uRow,uCol; 
+	u16  t;
 
 	delta_x=x2-x1; //计算坐标增量 
 	delta_y=y2-y1; 
@@ -298,17 +312,7 @@ void LCD_DrawLine(u16 x1, u16 y1, u16 x2, u16 y2)
 
 	//vline
 	if ((incy == 0) || (incx == 0)){
-		if (y1 > y2){
-			t		= y1;
-			y1		= y2;
-			y2		= t;
-		}
-		if (x1 > x2){
-			t		= x1;
-			x1		= x2;
-			x2		= t;
-		}
-		LCD_Fill(x1, y1, x2, y2);
+		LCD_FillRectangle(x1, y1, x2, y2);
 	}else {
 		for(t=0;t<=distance+1;t++ )//画线输出 
 		{  
@@ -1123,64 +1127,48 @@ void  LCD_DrawArc(uint32 x, uint32 y, uint32 r, uint32 stangle, uint32 endangle)
 }
 
 //-----------------------------------------------------------------------------//
+//
+void LCD_DrawBitmap(u16 x, u16 y, GUI_BITMAP *pict)
+{
+	u16 endx, endy;
+	u16 i = 0, j = 0, z = 0;
+	u16 *data;
+	u16  x_size;
+	
+	if (pict == NULL){
+		return;
+	}
+	if (x >= LCD_W){
+		x				= 0;
+	}
+	if (y >= LCD_H){
+		y				= 0;
+	}
+	x_size				= pict->x_size;
+	endx	= x + x_size;
+	endy    = y + pict->y_size;
+	printk("endy= %d  endx= %d\n", endy, endx);
+	if (endx > LCD_W){
+		endx	= LCD_W;
+	}
+	if (endy > LCD_H){
+		endy	= LCD_H;
+	}
+	data		= (u16 *)pict->data;
+	address_set(x, y, endx-1, endy-1);
 
-/* 定义十进制(0-7)==>十六进制位转换表，由于显示点数据是由左到右，所以十六进制位顺序是倒的 */
-#if 0
-uint8 const  DCB2HEX_TAB[8] = {0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01};
-
-uint8  GUI_LoadLine(uint32 x, uint32 y, uint8 *dat, uint32 no)
-{  uint8   bit_dat;
-   uint8   i;
-   TCOLOR  bakc;
-
-   /* 参数过滤 */
-   if(x>=GUI_LCM_XMAX) return(0);
-   if(y>=GUI_LCM_YMAX) return(0);
-   
-   for(i=0; i<no; i++)
-   {  /* 判断是否要读取点阵数据 */
-      if( (i%8)==0 ) bit_dat = *dat++;
-     
-      /* 设置相应的点为color或为back_color */
-      if( (bit_dat&DCB2HEX_TAB[i&0x07])==0 ) 
-	GUI_CopyColor(&bakc, back_color); 
-      else  GUI_CopyColor(&bakc, disp_color);
-      GUI_Point(x, y, bakc);       
-     
-      if( (++x)>=GUI_LCM_XMAX ) return(0);
-   }
-   
-   return(1);
+	printk("endy-y = %d  endx-x = %d\n", endy-y, endx-x);
+	for (j = 0; j < endy-y; ++j)
+	{
+		for (i = 0; i < endx-x; ++i){
+			paint_device->frame_buff[z++] = COLOR_CC(data[j*x_size+i]);
+		}
+	}
+	write_data((u8 *)paint_device->frame_buff, z<<1);
 }
-
-/****************************************************************************
-* 名称：GUI_LoadPic()
-* 功能：输出单色图形数据。
-* 入口参数： x		指定显示位置，x坐标
-*           y		指定显示位置，y坐标
-*           dat		要输出显示的数据
-*           hno     要显示此行的点个数
-*           lno     要显示此列的点个数
-* 出口参数：无
-* 说明：操作失败原因是指定地址超出有效范围。
-****************************************************************************/
-void  GUI_LoadPic(uint32 x, uint32 y, uint8 *dat, uint32 hno, uint32 lno)
-{  uint32  i;
-
-   for(i=0; i<lno; i++)
-   {  GUI_LoadLine(x, y, dat, hno);				// 输出一行数据
-      y++;										// 显示下一行
-      dat += (hno>>3);							// 计算下一行的数据
-      if( (hno&0x07)!=0 ) dat++;
-   }
-}
-
-#endif
 
 //--------------------------------------------------------------------//
 
-
-
 //在指定位置显示一个字符
 
 //num:要显示的字符:" "--->"~"
@@ -1192,7 +1180,6 @@ void  GUI_LoadPic(uint32 x, uint32 y, uint8 *dat, uint32 hno, uint32 lno)
 //mode:叠加方式(1)还是非叠加方式(0)
 
 uint8 const  DCB2HEX_TAB[8] = {0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01};
-
 
 void LCD_ShowChar(u16 x,u16 y,u8 num,u8 mode)
 {
@@ -1212,21 +1199,24 @@ void LCD_ShowChar(u16 x,u16 y,u8 num,u8 mode)
 	{
 		for(pos=0;pos<g_font_height;pos++)
 		{ 
-			temp = g_font_data[(u16)num*g_font_height*g_font_byteperline+pos]; 
 			for(t=0;t<g_font_width;t++)
 			{                 
-				if(temp & 0x01)
+				if ((t & 0x07) == 0)
+					temp = g_font_data[num*g_font_height*g_font_byteperline+
+								pos*g_font_byteperline+(t>>3)]; 
+				if(temp & DCB2HEX_TAB[t])
 					color = g_foreground_color;
 				else 
 					color = g_background_color;
 
 				paint_device->frame_buff[i++] = COLOR_CC(color);
-				temp>>=1; 
+				//temp>>=1; 
 			}
 		}
 		write_data((u8 *)paint_device->frame_buff, i<<1);
 	}else//叠加方式
 	{
+	#if 0
 		for(pos=0;pos<g_font_height;pos++)
 		{
 			temp = g_font_data[(u16)num*g_font_height*g_font_byteperline+pos]; 
@@ -1236,6 +1226,7 @@ void LCD_ShowChar(u16 x,u16 y,u8 num,u8 mode)
 					temp>>=1; 
 			}
 		}
+	#endif
 	}
 }   
 
@@ -1261,5 +1252,51 @@ void LCD_ShowString(u16 x,u16 y,const u8 *p)
 	}  
 }
 
+void coordinate_check(struct coordinate *pcoordinate)
+{
+	if (pcoordinate->m_x >= LCD_W){
+		pcoordinate->m_x	= LCD_W - 1;
+	}
+	if (pcoordinate->m_y >= LCD_H){
+		pcoordinate->m_y	= LCD_H - 1;
+	}
+}
+
+void coordinate_pair_check(struct coordinate_pair *pcoordinate_pair)
+{
+	if (pcoordinate_pair->m_x1 >= LCD_W){
+		pcoordinate_pair->m_x1	= LCD_W - 1;
+	}
+	if (pcoordinate_pair->m_y1 >= LCD_H){
+		pcoordinate_pair->m_y1	= LCD_H - 1;
+	}
+	if (pcoordinate_pair->m_x2 >= LCD_W){
+		pcoordinate_pair->m_x2	= LCD_W - 1;
+	}
+	if (pcoordinate_pair->m_y2 >= LCD_H){
+		pcoordinate_pair->m_y2	= LCD_H - 1;
+	}
+}
+#if 0
+
+#define B_BITS 5
+#define G_BITS 6
+#define R_BITS 5
+
+#define R_MASK ((1 << R_BITS) -1)
+#define G_MASK ((1 << G_BITS) -1)
+#define B_MASK ((1 << B_BITS) -1)
+
+uint16  LCD_Color2Index_565(uint32 Color) 
+{  
+	int r,g,b;
+	r = (Color>> (8  - R_BITS)) & R_MASK;
+	g = (Color>> (16 - G_BITS)) & G_MASK;
+	b = (Color>> (24 - B_BITS)) & B_MASK;
+	//return r + (g << R_BITS) + (b << (G_BITS + R_BITS));
+	//rgb 
+	return b + (g << R_BITS) + (r << (G_BITS + R_BITS));
+}
+#endif
 
 
