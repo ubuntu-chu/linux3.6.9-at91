@@ -38,13 +38,17 @@
 
 #include <linux/delay.h>
 #include <linux/slab.h>
+#include <linux/fs.h>
+#include <linux/mm.h>
+#include <asm/uaccess.h>
+#include <asm/io.h>
+#include <linux/mman.h>
+#include <linux/types.h>
 
 #include <linux/spi/spi.h>
 #include <linux/spi/spi_bitbang.h>
 
 #include "st7735.h"
-
-
 
 #define DRIVER_NAME	"lcd_st7735"
 
@@ -90,7 +94,12 @@ struct st7735_chip {
 	unsigned	backlight_active_low;
 };
 
-extern GUI_CONST_STORAGE GUI_BITMAP bmApplicationIcon;
+struct font_node{
+	struct font_set		*font_set;
+	struct list_head  node;
+};
+
+extern struct list_head font_list_head;
 
 #define RESET_PIN_HIGH()	gpio_set_value_cansleep(paint_device->rst_gpio, 1)
 #define RESET_PIN_LOW() 	gpio_set_value_cansleep(paint_device->rst_gpio, 0)
@@ -151,10 +160,7 @@ extern u16 g_foreground_color;
 extern u16 g_background_color;
 extern struct st7735_chip *paint_device;
 
-
-extern struct font  t_font8x16;
-extern struct font *pfont;
-
+extern struct list_head font_list_head;
 
 
 void paint_device_set(struct st7735_chip *pd);
@@ -192,11 +198,12 @@ void  LCD_DrawEllipse(uint32 x0, uint32 x1, uint32 y0, uint32 y1);
 void  LCD_DrawArc(uint32 x, uint32 y, uint32 r, uint32 stangle, uint32 endangle);
 void LCD_DisplayOn(void);
 void LCD_DisplayOff(void);
-void font_set(struct font *font);
+int font_set(const char *name);
 void LCD_DrawBitmap(u16 x, u16 y, GUI_BITMAP *pict);
 uint16  LCD_Color2Index_565(uint32 colorRGB);
 void coordinate_pair_check(struct coordinate_pair *pcoordinate_pair);
 void coordinate_check(struct coordinate *pcoordinate);
+struct font_set *font_find(const char *name);
 
 #endif
 

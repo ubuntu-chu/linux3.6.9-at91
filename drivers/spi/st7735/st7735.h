@@ -29,12 +29,23 @@ typedef unsigned char			uint8;
 typedef char					int8;
 
 struct font{
-	uint8        *data;
+	uint8       name[10];
 	uint8       width;
 	uint8       height;
 	uint8       byteperline;
+	uint16      size;
+	uint8       *data;
 };
 typedef struct font  GUI_FONT; 
+
+struct font_set{
+	uint8       name[10];
+	uint8       width;
+	uint8       height;
+	uint8       byteperline;
+	uint16      size;
+	uint8       data[0];
+};
 
 #define  GUI_CONST_STORAGE
 #define  GUI_DRAW_BMPM565   0
@@ -69,7 +80,9 @@ enum{
 	NR_DRAW_ARC,
 	//NR_DISPLAY_ON,
 	//NR_DISPLAY_OFF,
+	NR_SET_FONT_HEAD,
 	NR_SET_FONT,
+	NR_ADD_FONT,
 	NR_DRAW_BITMAP,
 	NR_BACKLIGHT_ON,
 	NR_BACKLIGHT_OFF,
@@ -116,6 +129,21 @@ struct arc
 	uint16		m_endangle;
 };
 
+struct pict
+{
+	uint16		m_x;
+	uint16		m_y;
+	uint16		m_x_size;
+	uint16		m_y_size;
+};
+struct string
+{
+	uint16		m_x;
+	uint16		m_y;
+	uint8      *m_data;
+	uint16		m_len;
+};
+
 /* 定义命令 */
 #define ST7735IOC_INIT			_IO(ST7735IOC_MAGIC, NR_INIT)
 #define ST7735IOC_UNINIT		_IO(ST7735IOC_MAGIC, NR_UNINT)
@@ -151,11 +179,15 @@ struct arc
 #define ST7735IOC_DRAW_ARC		_IOW(ST7735IOC_MAGIC, \
 									NR_DRAW_ARC, struct arc)
 
+#define ST7735IOC_DRAW_BITMAP	_IOW(ST7735IOC_MAGIC, \
+									NR_DRAW_BITMAP, struct pict)
 
-
-//#define ST7735IOCGETDATA _IOR(ST7735IOC_MAGIC, 2, int)
-//#define ST7735IOCSETDATA _IOW(ST7735IOC_MAGIC, 3, int)
-
+#define ST7735IOC_SET_FONT		_IO(ST7735IOC_MAGIC, \
+									NR_SET_FONT)
+#define ST7735IOC_ADD_FONT		_IO(ST7735IOC_MAGIC, \
+									NR_ADD_FONT)
+#define ST7735IOC_SHOW_STRING	_IOW(ST7735IOC_MAGIC, \
+									NR_SHOW_STRING, struct string)
 
 
 

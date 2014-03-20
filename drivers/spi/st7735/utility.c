@@ -18,22 +18,43 @@
 u16 g_foreground_color = 0x0000;
 u16 g_background_color = 0xffff;
 struct st7735_chip *paint_device;
-struct font *pfont;
-u16  g_font_width;
-u16  g_font_height;
-u16  g_font_byteperline;
-u8  *g_font_data;
+struct font_set *pfont = NULL;
+struct list_head font_list_head;
 
 void paint_device_set(struct st7735_chip *pd){
 	paint_device	= pd;
 }
 
-void font_set(struct font *font){
-	pfont			= font;
-	g_font_width	= font->width;
-	g_font_height   = font->height;
-	g_font_byteperline	= font->byteperline;
-	g_font_data		= font->data;
+struct font_set *font_find(const char *name)
+{
+	struct font_set *font_set  = NULL;
+	struct font_node *font_node  = NULL;
+	struct list_head  *pnode;
+
+	list_for_each(pnode, &font_list_head){
+		font_node	= list_entry(pnode, struct font_node, node);
+		font_set	= font_node->font_set;
+		printk("font name: %s\n", font_set->name);
+		if (0 == strcmp(font_set->name, name)){
+			break;
+		}
+	}
+	if (pnode == &font_list_head){
+		return NULL;
+	}else{
+		return font_set;
+	}
+}
+
+int font_set(const char *name){
+
+	struct font_set *font_set	= font_find(name);
+
+	if (font_set == NULL){
+		return -1;
+	}
+	pfont			= font_set;
+	return 0;
 }
 
 u16 foreground_color_set(u16 color){
@@ -209,8 +230,6 @@ void lcd_init(void)
 	write_reg_addr(0x3A); //65k mode
 	write_data8(0x55);
 	LCD_DisplayOn();
-
-	font_set(&t_font8x16);
 }
 
 void LCD_DisplayOn(void){
@@ -1131,7 +1150,7 @@ void  LCD_DrawArc(uint32 x, uint32 y, uint32 r, uint32 stangle, uint32 endangle)
 void LCD_DrawBitmap(u16 x, u16 y, GUI_BITMAP *pict)
 {
 	u16 endx, endy;
-	u16 i = 0, j = 0, z = 0;
+	//u16 i = 0, j = 0, z = 0;
 	u16 *data;
 	u16  x_size;
 	
@@ -1147,7 +1166,7 @@ void LCD_DrawBitmap(u16 x, u16 y, GUI_BITMAP *pict)
 	x_size				= pict->x_size;
 	endx	= x + x_size;
 	endy    = y + pict->y_size;
-	printk("endy= %d  endx= %d\n", endy, endx);
+	//printk("endy= %d  endx= %d\n", endy, endx);
 	if (endx > LCD_W){
 		endx	= LCD_W;
 	}
@@ -1157,7 +1176,8 @@ void LCD_DrawBitmap(u16 x, u16 y, GUI_BITMAP *pict)
 	data		= (u16 *)pict->data;
 	address_set(x, y, endx-1, endy-1);
 
-	printk("endy-y = %d  endx-x = %d\n", endy-y, endx-x);
+#if 0
+	//printk("endy-y = %d  endx-x = %d\n", endy-y, endx-x);
 	for (j = 0; j < endy-y; ++j)
 	{
 		for (i = 0; i < endx-x; ++i){
@@ -1165,6 +1185,10 @@ void LCD_DrawBitmap(u16 x, u16 y, GUI_BITMAP *pict)
 		}
 	}
 	write_data((u8 *)paint_device->frame_buff, z<<1);
+#else
+	write_data((u8 *)paint_device->frame_buff,
+			((uint16)(endy-y))*((uint16)(endx-x))<<1);
+#endif
 }
 
 //--------------------------------------------------------------------//
@@ -1185,42 +1209,50 @@ void LCD_ShowChar(u16 x,u16 y,u8 num,u8 mode)
 {
 	u8 temp;
 	u8 pos,t;
+	u8 *data;
 	u32  i = 0;
 	u16 color;
+	u16 width, height, bytesperline;
 
-	if(x>LCD_W-g_font_width || y>LCD_H-g_font_height) return;    
+	if (pfont == NULL){
+		return;
+	}
+	width	= pfont->width;
+	height  = pfont->height;
+	bytesperline	= pfont->byteperline;
+	if(x>LCD_W-width || y>LCD_H-height) return;    
 	if( (num<0x20) || (num>0x7f) ) num = 0x20;
 
 	//设置窗口   
 	num=num-' ';//得到偏移后的值
-	address_set(x,y,x+g_font_width-1,y+g_font_height-1);      //设置光标位置 
+	address_set(x,y,x+width-1,y+height-1);      //设置光标位置 
+	data	= pfont->data;
 
 	if(!mode) //非叠加方式
 	{
-		for(pos=0;pos<g_font_height;pos++)
+		for(pos=0;pos<height;pos++)
 		{ 
-			for(t=0;t<g_font_width;t++)
+			for(t=0;t<width;t++)
 			{                 
 				if ((t & 0x07) == 0)
-					temp = g_font_data[num*g_font_height*g_font_byteperline+
-								pos*g_font_byteperline+(t>>3)]; 
+					temp = data[num*height*bytesperline+
+								pos*bytesperline+(t>>3)]; 
 				if(temp & DCB2HEX_TAB[t])
 					color = g_foreground_color;
 				else 
 					color = g_background_color;
 
 				paint_device->frame_buff[i++] = COLOR_CC(color);
-				//temp>>=1; 
 			}
 		}
 		write_data((u8 *)paint_device->frame_buff, i<<1);
 	}else//叠加方式
 	{
 	#if 0
-		for(pos=0;pos<g_font_height;pos++)
+		for(pos=0;pos<height;pos++)
 		{
-			temp = g_font_data[(u16)num*g_font_height*g_font_byteperline+pos]; 
-			for(t=0;t<g_font_width;t++)
+			temp = data[(u16)num*height*bytesperline+pos]; 
+			for(t=0;t<width;t++)
 			{                 
 				if(temp&0x01)LCD_DrawPoint(x+t,y+pos);//画一个点     
 					temp>>=1; 
@@ -1236,18 +1268,26 @@ void LCD_ShowChar(u16 x,u16 y,u8 num,u8 mode)
 //用16字体
 void LCD_ShowString(u16 x,u16 y,const u8 *p)
 {         
+	u16 width, height;
+
+	if (pfont == NULL){
+		return;
+	}
+	width	= pfont->width;
+	height  = pfont->height;
+
 	while(*p!='\0')
 	{       
-		if(x>LCD_W-g_font_width)
+		if(x>LCD_W-width)
 		{
-			x=0;y+=g_font_height;
+			x=0;y+=height;
 		}
-		if(y>LCD_H-g_font_height)
+		if(y>LCD_H-height)
 		{
 			y=x=0;
 		}
 		LCD_ShowChar(x,y,*p,0);
-		x+=g_font_width;
+		x+=width;
 		p++;
 	}  
 }

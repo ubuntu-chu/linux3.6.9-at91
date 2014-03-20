@@ -330,7 +330,17 @@ int st7735_open(struct inode *inode, struct file *filp)
 int st7735_release(struct inode *inode, struct file *filp)  
 {  
 	struct st7735_chip *sc = filp->private_data;
+	struct font_set *font_set  = NULL;
+	struct font_node *font_node  = NULL;
+	struct list_head  *pnode;
 
+	list_for_each(pnode, &font_list_head){
+		font_node	= list_entry(pnode, struct font_node, node);
+		font_set	= font_node->font_set;
+		P_DEBUG_SIMPLE("font_set: %s release\n", font_set->name);
+		kfree(font_set);
+		kfree(font_node);
+	}
 	atomic_inc(&(sc->open_cnt));  
 	P_DEBUG_SIMPLE("\n");
 	RESET_PIN_LOW();
@@ -465,10 +475,20 @@ long st7735_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				}
 			}
 			break;
-			/*
 		case ST7735IOC_SHOW_STRING:
+			{
+				struct string t_string;
+				if (copy_from_user(&t_string, 
+							(struct string *)arg, 
+							sizeof(struct string))){  
+					ret =  -EFAULT;  
+					break;
+				}
+//				printk("str = %s\n", t_string.m_data);
+//				printk("str addr = %p\n", t_string.m_data);
+				LCD_ShowString(t_string.m_x, t_string.m_y, t_string.m_data);
+			}
 			break;
-			*/
 		case ST7735IOC_DRAW_CIRCLE:
 		case ST7735IOC_FILL_CIRCLE:
 			{
@@ -521,12 +541,79 @@ long st7735_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 						t_arc.m_endangle);
 			}
 			break;
-			/*
-		case ST7735IOC_SET_FONT:
-			break;
 		case ST7735IOC_DRAW_BITMAP:
+			{
+				struct pict t_pict;
+				GUI_BITMAP  t_bitmap;
+
+				if (copy_from_user(&t_pict, 
+							(struct pict *)arg, 
+							sizeof(struct pict))){  
+					ret =  -EFAULT;  
+					break;
+				}
+				t_bitmap.x_size		= t_pict.m_x_size;
+				t_bitmap.y_size		= t_pict.m_y_size;
+				t_bitmap.data		= (uint8 *)(sc->frame_buff);
+				LCD_DrawBitmap(t_pict.m_x, t_pict.m_y, &t_bitmap);
+			}
 			break;
-			*/
+		case ST7735IOC_SET_FONT:
+			{
+				P_DEBUG_SIMPLE("ST7735IOC_SET_FONT start\n");
+				P_DEBUG_SIMPLE("new font name: %s\n", (char *)arg);
+				if (font_set((const char *)arg)){
+					ret =  -EINVAL;  
+					break;
+				}
+				P_DEBUG_SIMPLE("ST7735IOC_SET_FONT end\n");
+			}
+			break;
+		case ST7735IOC_ADD_FONT:
+			{
+				struct font t_font;
+				struct font_set *font_set;
+				struct font_node *node; 
+
+				if (copy_from_user(&t_font, 
+							(struct font *)arg, 
+							sizeof(struct font))){  
+					ret =  -EFAULT;  
+					break;
+				}
+				P_DEBUG_SIMPLE("ST7735IOC_ADD_FONT start\n");
+				P_DEBUG_SIMPLE("name: %s size: %d\n", t_font.name, t_font.size);
+				if (NULL != font_find(t_font.name)){
+					P_DEBUG_SIMPLE("ST7735IOC_ADD_FONT font already added!\n");
+					ret =  -EINVAL;  
+					break;
+				}
+				font_set   = (struct font_set *)kmalloc(
+								sizeof(struct font_set) + t_font.size, 
+								GFP_KERNEL);
+				if (font_set == NULL){
+					ret = -ENOMEM;
+					break;
+				}
+				if (copy_from_user(font_set, 
+							(struct font_set *)arg, 
+							sizeof(struct font_set)+t_font.size)){  
+					ret =  -EFAULT;  
+					kfree(font_set);
+					break;
+				}
+				node	= (struct font_node *)kmalloc(
+								sizeof(struct font_node), GFP_KERNEL);
+				if (node == NULL){
+					ret = -ENOMEM;
+					kfree(font_set);
+					break;
+				}
+				node->font_set		= font_set;
+				list_add_tail(&(node->node), &font_list_head);
+				P_DEBUG_SIMPLE("ST7735IOC_ADD_FONT end\n");
+			}
+			break;
 		default:
 			ret		= -EINVAL;
 			break;
@@ -536,10 +623,49 @@ long st7735_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	return ret;
 }
 
+static void st7735_vm_open(struct vm_area_struct *vma)
+{
+	P_DEBUG_SIMPLE("virt: 0x%1lx, offset: 0x%2lx\n", vma->vm_start, 
+			vma->vm_pgoff<<PAGE_SHIFT);
+}
+
+static void st7735_vm_close(struct vm_area_struct *vma)
+{
+	P_DEBUG_SIMPLE("\n");
+}
+
+struct vm_operations_struct vm_ops = 
+{
+	.open = st7735_vm_open,
+	.close = st7735_vm_close,
+};
+
+static int st7735_mmap(struct file * filp, struct vm_area_struct * vma) 
+{
+	struct st7735_chip *sc = filp->private_data;
+	unsigned long vmsize = vma->vm_end-vma->vm_start;
+	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT; 
+	unsigned long available_size = LCD_FRAME_BUFF_SIZE - offset;
+
+	if (vmsize > available_size)
+		return -ENXIO;
+
+	if (remap_pfn_range(vma, vma->vm_start,
+			virt_to_phys((void*)((unsigned long)sc->frame_buff)) >> PAGE_SHIFT, 
+			vmsize, vma->vm_page_prot)){
+		return -EAGAIN;
+	}
+	vma->vm_ops = &vm_ops;
+	st7735_vm_open(vma);
+
+	return 0;
+}
+
 struct file_operations st7735_fops = {
 	.owner = THIS_MODULE,
 	.open = st7735_open,
 	.release = st7735_release, 
+	.mmap	= st7735_mmap,
 	.unlocked_ioctl = st7735_ioctl,
 };
 
@@ -547,6 +673,7 @@ static int __devinit st7735_probe(struct spi_device *spi)
 {
 	int				ret;
 	struct st7735_chip *sc;
+	unsigned long  virt_addr;
 
 	P_DEBUG_SIMPLE("enter\n");
 	sc = kzalloc(sizeof(struct st7735_chip), GFP_KERNEL);
@@ -590,6 +717,12 @@ static int __devinit st7735_probe(struct spi_device *spi)
 	if (sc->frame_buff == NULL){
 		goto exit_destroy_3;
 	}
+	for (virt_addr = (unsigned long)(sc->frame_buff); 
+			virt_addr < (unsigned long)(sc->frame_buff) + LCD_FRAME_BUFF_SIZE;
+			virt_addr += PAGE_SIZE){
+		SetPageReserved(virt_to_page(virt_addr));
+	}
+	INIT_LIST_HEAD(&font_list_head);
 
 	P_DEBUG_SIMPLE("exit\n");
 	return 0;
@@ -614,6 +747,13 @@ static int __devexit st7735_remove(struct spi_device *spi)
 		return -ENODEV;
 
 	if (sc->frame_buff != NULL){
+		unsigned long virt_addr;
+
+		for (virt_addr = (unsigned long)(sc->frame_buff); 
+				virt_addr < (unsigned long)(sc->frame_buff) + LCD_FRAME_BUFF_SIZE;
+				virt_addr += PAGE_SIZE){
+			ClearPageReserved(virt_to_page(virt_addr));
+		}
 		kfree(sc->frame_buff);
 	}
 	mutex_destroy(&(sc->mutex));
