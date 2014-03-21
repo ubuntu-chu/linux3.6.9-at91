@@ -583,6 +583,13 @@ long st7735_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				}
 				P_DEBUG_SIMPLE("ST7735IOC_ADD_FONT start\n");
 				P_DEBUG_SIMPLE("name: %s size: %d\n", t_font.name, t_font.size);
+				if ((t_font.x_dist > t_font.width) 
+						|| (t_font.y_dist > t_font.height)){
+					P_DEBUG_SIMPLE("ST7735IOC_ADD_FONT font x_dist or y_dist invalid!\n");
+					ret =  -EINVAL;  
+					break;
+				}
+
 				if (NULL != font_find(t_font.name)){
 					P_DEBUG_SIMPLE("ST7735IOC_ADD_FONT font already added!\n");
 					ret =  -EINVAL;  

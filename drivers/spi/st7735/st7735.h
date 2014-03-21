@@ -33,6 +33,8 @@ struct font{
 	uint8       width;
 	uint8       height;
 	uint8       byteperline;
+	uint8       x_dist;
+	uint8       y_dist;
 	uint16      size;
 	uint8       *data;
 };
@@ -43,6 +45,8 @@ struct font_set{
 	uint8       width;
 	uint8       height;
 	uint8       byteperline;
+	uint8       x_dist;
+	uint8       y_dist;
 	uint16      size;
 	uint8       data[0];
 };

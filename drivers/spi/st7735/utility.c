@@ -1212,27 +1212,29 @@ void LCD_ShowChar(u16 x,u16 y,u8 num,u8 mode)
 	u8 *data;
 	u32  i = 0;
 	u16 color;
-	u16 width, height, bytesperline;
+	u16 width, height, bytesperline, x_dist, y_dist;
 
 	if (pfont == NULL){
 		return;
 	}
 	width	= pfont->width;
 	height  = pfont->height;
+	x_dist	= pfont->x_dist;
+	y_dist  = pfont->y_dist;
 	bytesperline	= pfont->byteperline;
-	if(x>LCD_W-width || y>LCD_H-height) return;    
+	if(x>LCD_W-x_dist || y>LCD_H-y_dist) return;    
 	if( (num<0x20) || (num>0x7f) ) num = 0x20;
 
 	//设置窗口   
 	num=num-' ';//得到偏移后的值
-	address_set(x,y,x+width-1,y+height-1);      //设置光标位置 
+	address_set(x,y,x+x_dist-1,y+y_dist-1);      //设置光标位置 
 	data	= pfont->data;
 
 	if(!mode) //非叠加方式
 	{
-		for(pos=0;pos<height;pos++)
+		for(pos=0;pos<y_dist;pos++)
 		{ 
-			for(t=0;t<width;t++)
+			for(t=0;t<x_dist;t++)
 			{                 
 				if ((t & 0x07) == 0)
 					temp = data[num*height*bytesperline+
@@ -1268,26 +1270,28 @@ void LCD_ShowChar(u16 x,u16 y,u8 num,u8 mode)
 //用16字体
 void LCD_ShowString(u16 x,u16 y,const u8 *p)
 {         
-	u16 width, height;
+	u16 x_dist, y_dist;
 
 	if (pfont == NULL){
 		return;
 	}
-	width	= pfont->width;
-	height  = pfont->height;
+	x_dist  = pfont->x_dist;
+	y_dist  = pfont->y_dist;
 
 	while(*p!='\0')
 	{       
-		if(x>LCD_W-width)
+		if(x > LCD_W-x_dist)
 		{
-			x=0;y+=height;
+			x=0;
+			y+=y_dist;
 		}
-		if(y>LCD_H-height)
+		if(y > LCD_H-y_dist)
 		{
-			y=x=0;
+			return;
+			//y=x=0;
 		}
 		LCD_ShowChar(x,y,*p,0);
-		x+=width;
+		x += x_dist;
 		p++;
 	}  
 }
