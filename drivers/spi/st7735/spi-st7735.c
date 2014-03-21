@@ -561,7 +561,7 @@ long st7735_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		case ST7735IOC_SET_FONT:
 			{
 				P_DEBUG_SIMPLE("ST7735IOC_SET_FONT start\n");
-				P_DEBUG_SIMPLE("new font name: %s\n", (char *)arg);
+				P_DEBUG_SIMPLE("set font name: %s\n", (char *)arg);
 				if (font_set((const char *)arg)){
 					ret =  -EINVAL;  
 					break;

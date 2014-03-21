@@ -34,7 +34,7 @@ struct font_set *font_find(const char *name)
 	list_for_each(pnode, &font_list_head){
 		font_node	= list_entry(pnode, struct font_node, node);
 		font_set	= font_node->font_set;
-		printk("font name: %s\n", font_set->name);
+		P_DEBUG_SIMPLE("exist font name: %s\n", font_set->name);
 		if (0 == strcmp(font_set->name, name)){
 			break;
 		}

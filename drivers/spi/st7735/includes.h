@@ -52,7 +52,7 @@
 
 #define DRIVER_NAME	"lcd_st7735"
 
-#define    P_DEBUG_SWITCH        (1)
+#define    P_DEBUG_SWITCH        (0)
  
 #if    (P_DEBUG_SWITCH > 0)
     #define P_DEBUG_DEV(dev, fmt, args...)   printk("<1>" "<kernel>[%s %s %s(%d):%s]"fmt,\

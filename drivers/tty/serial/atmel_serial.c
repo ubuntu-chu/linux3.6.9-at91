@@ -266,13 +266,19 @@ static void atmel_rs485_special_status(struct atmel_uart_port *port, u8 is_send,
 		int	value	= (RS485_STATUS_SEND == is_send)?(1):(0);
 		unsigned int status;
 		struct uart_port *u_port	= &port->uart;
+		struct circ_buf *xmit		= &u_port->state->xmit;
 
-#if P_DEBUG_SWITCH > 0
 		P_DEBUG("****called by %s\n", function_str);
-#endif
-		do{
-			status = UART_GET_CSR(u_port);
-		}while (!(status & ATMEL_US_TXEMPTY));
+		if (RS485_STATUS_RECV == is_send){
+			if (!uart_circ_empty(xmit)){
+				printk("atmel_rs485_special_status:!uart_circ_empty occured\n"); 
+				printk("****called by %s\n", function_str);
+				return;
+			}
+			do{
+				status = UART_GET_CSR(u_port);
+			}while (!(status & ATMEL_US_TXEMPTY));
+		}
 		P_DEBUG("****rs485 setting:%s  pin=%d value=%d\n", (RS485_STATUS_SEND==is_send)?("tx"):("rx"), port->rs485_rts_pin, value);
 		/* Set RS485 mode, add by chuM */
 		gpio_set_value_cansleep(port->rs485_rts_pin, value);
@@ -902,6 +908,9 @@ static void atmel_dma_tx_complete(void *arg)
 	atmel_port->desc_tx = NULL;
 	spin_unlock_irq(&atmel_port->lock_tx);
 
+	tasklet_schedule(&atmel_port->tasklet);
+	P_DEBUG("tasklet_schedule call\n");
+#if 0
 	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS){
 		uart_write_wakeup(port);
 		P_DEBUG("uart_write_wakeup -- complete\n");
@@ -915,6 +924,7 @@ static void atmel_dma_tx_complete(void *arg)
 		P_DEBUG("uart circ empty dma tx complete++\n");
 		atmel_rs485_special_status(atmel_port, RS485_STATUS_RECV, __FUNCTION__);
 	}
+#endif
 
 	spin_unlock_irqrestore(&port->lock, flags);
 }
@@ -949,8 +959,9 @@ static void atmel_tx_dma(struct uart_port *port)
 
 	P_DEBUG("enter\n");
 	/* Make sure we have an idle channel */
-	if (atmel_port->desc_tx != NULL)
+	if (atmel_port->desc_tx != NULL){
 		return;
+	}
 
 	if (!uart_circ_empty(xmit) && !uart_tx_stopped(port)) {
 		/*
@@ -993,9 +1004,10 @@ static void atmel_tx_dma(struct uart_port *port)
 
 	} else {
 		if (atmel_port->rs485.flags & SER_RS485_ENABLED) {
+			atmel_rs485_special_status(atmel_port, RS485_STATUS_RECV,
+					__FUNCTION__);
 			/* DMA done, stop TX, start RX for RS485 */
 			atmel_start_rx(port);
-			atmel_rs485_special_status(atmel_port, RS485_STATUS_RECV, __FUNCTION__);
 		}
 	}
 
@@ -1862,7 +1874,6 @@ static void atmel_shutdown(struct uart_port *port)
 	 */
 	atmel_stop_rx(port);
 	atmel_stop_tx(port);
-	atmel_rs485_special_status(atmel_port, RS485_STATUS_RECV, __FUNCTION__);
 
 	/*
 	 * Shut-down the DMA.
