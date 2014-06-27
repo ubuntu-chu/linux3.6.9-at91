@@ -332,15 +332,16 @@ int st7735_release(struct inode *inode, struct file *filp)
 	struct st7735_chip *sc = filp->private_data;
 	struct font_set *font_set  = NULL;
 	struct font_node *font_node  = NULL;
-	struct list_head  *pnode;
+	struct list_head  *pnode, *n;
 
-	list_for_each(pnode, &font_list_head){
+	list_for_each_safe(pnode, n, &font_list_head){
 		font_node	= list_entry(pnode, struct font_node, node);
 		font_set	= font_node->font_set;
 		P_DEBUG_SIMPLE("font_set: %s release\n", font_set->name);
 		kfree(font_set);
 		kfree(font_node);
 	}
+	INIT_LIST_HEAD(&font_list_head);
 	atomic_inc(&(sc->open_cnt));  
 	P_DEBUG_SIMPLE("\n");
 	RESET_PIN_LOW();
