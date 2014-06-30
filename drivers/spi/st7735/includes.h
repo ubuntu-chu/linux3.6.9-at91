@@ -94,6 +94,13 @@ struct st7735_chip {
 	unsigned	backlight_active_low;
 };
 
+struct st7735_gpio{
+	unsigned	backlight_gpios;
+	unsigned	cd_gpios;
+	unsigned	rst_gpios;
+};
+
+
 struct font_node{
 	struct font_set		*font_set;
 	struct list_head  node;

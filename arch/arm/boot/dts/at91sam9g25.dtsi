@@ -53,6 +53,7 @@
 					reg = <0>;        
 				};
 				*/
+				/*
 				st7735_lcd{
 					compatible = "st7735";          
 
@@ -64,6 +65,7 @@
 					//spi-cpha;							//rise edge tranfer data  both mode0 and mode3 are ok
 					//spi-cpol;
 				};
+				*/
 			};
 		};
 	};

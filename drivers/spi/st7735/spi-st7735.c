@@ -179,17 +179,29 @@ static ssize_t lcd_display_store(struct device *dev,
 static const DEVICE_ATTR(lcd_display, 0222,
 	NULL, lcd_display_store);
 
+//#define		def_CRATE_GPIO_WITH_OF	
+
+#ifdef def_CRATE_GPIO_WITH_OF
+
 static int __devinit create_gpio(struct device_node *np, unsigned *pin, const char *name, const char *gpio_name, int value)
+#else
+static int __devinit create_gpio(unsigned pin, const char *name, const char *gpio_name, int value)
+#endif
 {
 	int ret;
-	enum of_gpio_flags flags;
 	unsigned gpio;
+#ifdef def_CRATE_GPIO_WITH_OF
+
+	enum of_gpio_flags flags;
 
 	if (NULL == pin){
 		printk(KERN_INFO "pin must not be null\n");
 		return 0;
 	}
 	gpio	= of_get_named_gpio_flags(np, name, 0, &flags);
+#else
+	gpio	= pin;
+#endif
 
 	/* skip leds that aren't available */
 	if (!gpio_is_valid(gpio)) {
@@ -207,7 +219,9 @@ static int __devinit create_gpio(struct device_node *np, unsigned *pin, const ch
 	ret = gpio_direction_output(gpio, value);
 	if (ret < 0)
 		goto err;
+#ifdef def_CRATE_GPIO_WITH_OF
 	*pin	= gpio;
+#endif
 		
 	return 0;
 err:
@@ -219,10 +233,17 @@ static int st7735_gpio_request(struct st7735_chip*sc){
 
 	int ret;
 	struct spi_device *spi	= sc->spi;
+#ifdef def_CRATE_GPIO_WITH_OF
 	struct device_node *np = spi->dev.of_node;
+#endif
 
+#ifdef def_CRATE_GPIO_WITH_OF
 	//reset pin
 	ret = create_gpio(np, &(sc->rst_gpio), RST_PROP_NAME, DRIVER_NAME":"RST_PROP_NAME, 0);
+#else
+	ret = create_gpio(sc->rst_gpio, RST_PROP_NAME, DRIVER_NAME":"RST_PROP_NAME, 0);
+
+#endif
 	if (ret)
 		goto exit;
 #if 0
@@ -232,7 +253,11 @@ static int st7735_gpio_request(struct st7735_chip*sc){
 #endif
 
 	//cd pin
+#ifdef def_CRATE_GPIO_WITH_OF
 	ret = create_gpio(np, &(sc->cd_gpio), CD_PROP_NAME, DRIVER_NAME":"CD_PROP_NAME, 0);
+#else 
+	ret = create_gpio(sc->cd_gpio, CD_PROP_NAME, DRIVER_NAME":"CD_PROP_NAME, 0);
+#endif
 	if (ret)
 		goto exit_1;
 #if 0
@@ -242,7 +267,11 @@ static int st7735_gpio_request(struct st7735_chip*sc){
 #endif
 
 	//backlight pin
+#ifdef def_CRATE_GPIO_WITH_OF
 	ret = create_gpio(np, &(sc->backlight_gpio), BACKLIGHT_PROP_NAME, DRIVER_NAME":"BACKLIGHT_PROP_NAME, 1);
+#else
+	ret = create_gpio(sc->backlight_gpio, BACKLIGHT_PROP_NAME, DRIVER_NAME":"BACKLIGHT_PROP_NAME, 1);
+#endif
 	if (ret)
 		goto exit_2;
 #if 1
@@ -684,6 +713,13 @@ static int __devinit st7735_probe(struct spi_device *spi)
 	unsigned long  virt_addr;
 
 	P_DEBUG_SIMPLE("enter\n");
+#ifndef def_CRATE_GPIO_WITH_OF
+
+	if (spi->dev.platform_data == NULL){
+		printk(KERN_INFO "device platform data must not be null!\n");
+		return 0;
+	}
+#endif
 	sc = kzalloc(sizeof(struct st7735_chip), GFP_KERNEL);
 	if (!sc)
 		return -ENOMEM;        
@@ -692,6 +728,18 @@ static int __devinit st7735_probe(struct spi_device *spi)
 	spi_set_drvdata(spi, sc);
 	sc->spi = spi;
 	paint_device_set(sc);
+#ifndef def_CRATE_GPIO_WITH_OF
+	{
+		struct st7735_gpio *pgpio = spi->dev.platform_data;
+		sc->rst_gpio			= pgpio->rst_gpios;
+		sc->cd_gpio				= pgpio->cd_gpios;
+		sc->backlight_gpio		= pgpio->backlight_gpios;
+	#if 0
+		printk(KERN_INFO "rst_gpio = %d cd_gpio = %d backlight_gpio = %d\n", 
+				pgpio->rst_gpios, pgpio->cd_gpios, pgpio->backlight_gpios);
+	#endif
+	}
+#endif
 
 	ret = alloc_chrdev_region(&(sc->devno), 0, 1, "st7735 lcd driver");
 	if(ret) {
@@ -794,10 +842,41 @@ static struct spi_driver st7735_spi_driver = {
 	.remove		= __devexit_p(st7735_remove),	
 };
 
+static struct st7735_gpio t_st7735_gpio = {
+
+	.backlight_gpios	= AT91_PIN_PB11,
+	.cd_gpios			= AT91_PIN_PB12,
+	.rst_gpios			= AT91_PIN_PB13,
+};
+
+#define		SPI_BUS_NUM			(32766)
+	
+//spi device
+static struct spi_board_info st7735_board_info = {
+	.modalias	= DRIVER_NAME,
+	.chip_select	= 0,
+	.max_speed_hz	= 30 * 1000 * 1000,			// 30 MHz    
+	.bus_num	= SPI_BUS_NUM,
+	//rise edge tranfer data  both mode0 and mode3 are ok
+	.mode		= 0,				
+	.platform_data = (void *)&t_st7735_gpio,
+};
+
+
 /* Driver init function */
 static int __init st7735_init(void)
 {
+	struct spi_master *master;
+
+	master	= spi_busnum_to_master(SPI_BUS_NUM);
+	if (NULL == master){
+		printk("<0>""master = NULL!\n");
+		return  -EINVAL;
+	}
 	P_DEBUG_SIMPLE("\n");
+	spi_new_device(master, &st7735_board_info);
+	spi_master_put(master);
+
 	return spi_register_driver(&st7735_spi_driver);	
 }
 

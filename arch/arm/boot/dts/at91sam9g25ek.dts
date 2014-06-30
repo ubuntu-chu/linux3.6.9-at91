@@ -28,30 +28,6 @@
 				status = "okay";
 			};
 
-			indicator {
-				compatible = "gpio-leds";
-				//status = "okay";
-				status = "disabled";
-
-				run {
-					label = "run";
-					gpios = <&pioB 14 1>;
-					linux,default-trigger = "gpio";
-				};
-
-				fault {
-					label = "fault";
-					gpios = <&pioB 12 1>;
-					linux,default-trigger = "gpio";
-				};
-
-				alarm {
-					label = "alarm";
-					gpios = <&pioB 13 1>;
-					linux,default-trigger = "gpio";
-				};
-			};
-
 			usart0: serial@f801c000 {
 				pinctrl-0 = <&pinctrl_usart0 &pinctrl_usart0_rts_cts>;
 				linux,rs485-enabled-at-boot-time;

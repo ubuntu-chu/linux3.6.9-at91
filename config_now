@@ -310,7 +310,6 @@ CONFIG_MACH_AT91SAM_DT=y
 CONFIG_AT91_PROGRAMMABLE_CLOCKS=y
 # CONFIG_AT91_SLOW_CLOCK is not set
 CONFIG_AT91_TIMER_HZ=128
-# CONFIG_KEYBOARD_GPIO_POLLED is not set
 
 #
 # Processor Type
@@ -526,14 +525,7 @@ CONFIG_BQL=y
 # CONFIG_IRDA is not set
 # CONFIG_BT is not set
 # CONFIG_AF_RXRPC is not set
-CONFIG_WIRELESS=y
-# CONFIG_CFG80211 is not set
-CONFIG_LIB80211=y
-# CONFIG_LIB80211_DEBUG is not set
-
-#
-# CFG80211 needs to be enabled for MAC80211
-#
+# CONFIG_WIRELESS is not set
 # CONFIG_WIMAX is not set
 # CONFIG_RFKILL is not set
 # CONFIG_NET_9P is not set
@@ -857,7 +849,7 @@ CONFIG_MICREL_PHY=y
 #
 CONFIG_INPUT=y
 # CONFIG_INPUT_FF_MEMLESS is not set
-CONFIG_INPUT_POLLDEV=y
+# CONFIG_INPUT_POLLDEV is not set
 # CONFIG_INPUT_SPARSEKMAP is not set
 # CONFIG_INPUT_MATRIXKMAP is not set
 
@@ -866,24 +858,13 @@ CONFIG_INPUT_POLLDEV=y
 #
 # CONFIG_INPUT_MOUSEDEV is not set
 # CONFIG_INPUT_JOYDEV is not set
-CONFIG_INPUT_EVDEV=y
-CONFIG_INPUT_EVBUG=y
+# CONFIG_INPUT_EVDEV is not set
+# CONFIG_INPUT_EVBUG is not set
 
 #
 # Input Device Drivers
 #
-CONFIG_INPUT_KEYBOARD=y
-# CONFIG_KEYBOARD_ATKBD is not set
-# CONFIG_KEYBOARD_LKKBD is not set
-CONFIG_KEYBOARD_GPIO=y
-# CONFIG_KEYBOARD_MATRIX is not set
-# CONFIG_KEYBOARD_NEWTON is not set
-# CONFIG_KEYBOARD_OPENCORES is not set
-# CONFIG_KEYBOARD_SAMSUNG is not set
-# CONFIG_KEYBOARD_STOWAWAY is not set
-# CONFIG_KEYBOARD_SUNKBD is not set
-# CONFIG_KEYBOARD_OMAP4 is not set
-# CONFIG_KEYBOARD_XTKBD is not set
+# CONFIG_INPUT_KEYBOARD is not set
 # CONFIG_INPUT_MOUSE is not set
 # CONFIG_INPUT_JOYSTICK is not set
 # CONFIG_INPUT_TABLET is not set
@@ -957,7 +938,7 @@ CONFIG_SPI_MASTER=y
 CONFIG_SPI_ATMEL=y
 # CONFIG_SPI_BITBANG is not set
 # CONFIG_SPI_GPIO is not set
-CONFIG_SPI_ST7735S=y
+CONFIG_SPI_ST7735S=m
 # CONFIG_SPI_OC_TINY is not set
 # CONFIG_SPI_PXA2XX_PCI is not set
 # CONFIG_SPI_XILINX is not set
@@ -966,7 +947,7 @@ CONFIG_SPI_ST7735S=y
 #
 # SPI Protocol Masters
 #
-CONFIG_SPI_SPIDEV=y
+# CONFIG_SPI_SPIDEV is not set
 # CONFIG_SPI_TLE62X0 is not set
 # CONFIG_HSI is not set
 
@@ -1008,6 +989,7 @@ CONFIG_GPIO_SYSFS=y
 #
 # CONFIG_GPIO_GENERIC_PLATFORM is not set
 # CONFIG_GPIO_EM is not set
+CONFIG_GPIO_HINT=m
 
 #
 # I2C GPIO expanders:
@@ -1124,6 +1106,7 @@ CONFIG_LEDS_GPIO=y
 # CONFIG_LEDS_LT3593 is not set
 # CONFIG_LEDS_RENESAS_TPU is not set
 # CONFIG_LEDS_OT200 is not set
+CONFIG_LEDS_INDICATOR=m
 CONFIG_LEDS_TRIGGERS=y
 
 #
@@ -1242,55 +1225,7 @@ CONFIG_CLKDEV_LOOKUP=y
 # CONFIG_PM_DEVFREQ is not set
 # CONFIG_EXTCON is not set
 # CONFIG_MEMORY is not set
-CONFIG_IIO=y
-CONFIG_IIO_BUFFER=y
-CONFIG_IIO_KFIFO_BUF=y
-CONFIG_IIO_TRIGGERED_BUFFER=y
-CONFIG_IIO_TRIGGER=y
-CONFIG_IIO_CONSUMERS_PER_TRIGGER=2
-
-#
-# Analog to digital converters
-#
-# CONFIG_AD7266 is not set
-CONFIG_AT91_ADC=y
-
-#
-# Amplifiers
-#
-# CONFIG_AD8366 is not set
-
-#
-# Light sensors
-#
-
-#
-# Frequency Synthesizers DDS/PLL
-#
-
-#
-# Clock Generator/Distribution
-#
-# CONFIG_AD9523 is not set
-
-#
-# Phase-Locked Loop (PLL) frequency synthesizers
-#
-# CONFIG_ADF4350 is not set
-
-#
-# Digital to analog converters
-#
-# CONFIG_AD5064 is not set
-# CONFIG_AD5360 is not set
-# CONFIG_AD5380 is not set
-# CONFIG_AD5421 is not set
-# CONFIG_AD5624R_SPI is not set
-# CONFIG_AD5446 is not set
-# CONFIG_AD5504 is not set
-# CONFIG_AD5764 is not set
-# CONFIG_AD5791 is not set
-# CONFIG_AD5686 is not set
+# CONFIG_IIO is not set
 # CONFIG_PWM is not set
 
 #
