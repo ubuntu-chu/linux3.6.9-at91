@@ -448,8 +448,17 @@ config LEDS_BLINKM
 config LEDS_INDICATOR
 	tristate "LED support for indicator"
 	depends on LEDS_CLASS
+	default m
 	help
 	  This option enables support for the indicator LEDs on the 
+	  front panel.
+
+config LEDS_INDICATOR_NEW
+	tristate "LED support for indicator new"
+	depends on LEDS_CLASS
+	default m
+	help
+	  This option enables support for the indicator-new LEDs on the 
 	  front panel.
 
 config LEDS_TRIGGERS

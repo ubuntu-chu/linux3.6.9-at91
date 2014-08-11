@@ -90,12 +90,46 @@ static ssize_t pc29_value_store(struct device *dev,
 static const DEVICE_ATTR(pc29_value, 0444,
 	pc29_value_show, pc29_value_store);
 
+static ssize_t pc28_value_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	ssize_t			status;
+	int value;
+	struct gpio_detect	*pgpio_detect	= (struct gpio_detect *)dev->platform_data;
+	int pc28				= pgpio_detect->pc28;
+
+	value = !!gpio_get_value_cansleep(pc28);
+	status = sprintf(buf, "%d\n", value);
+
+	return status;
+}
+
+static ssize_t pc28_value_store(struct device *dev,
+				struct device_attribute *attr, const char *buf, size_t size)
+{
+	ssize_t			status;
+	struct gpio_detect	*pgpio_detect	= (struct gpio_detect *)dev->platform_data;
+	int pc28				= pgpio_detect->pc28;
+	long		value;
+
+	status = strict_strtol(buf, 0, &value);
+	if (status == 0) {
+		gpio_set_value_cansleep(pc28, value != 0);
+		status = size;
+	}
+
+	return status;
+}
+
+static const DEVICE_ATTR(pc28_value, 0444,
+	pc28_value_show, pc28_value_store);
+
 static int __init gpio_detect_probe(struct platform_device *pdev)
 {
 	int ret;
 	unsigned gpio;
 	struct gpio_detect	*pgpio_detect	= (struct gpio_detect *)pdev->dev.platform_data;
-	char *name		= "gpio detect";
+	char *name		= "gpio detect - pc29";
 
 	P_DEBUG_SIMPLE("\n");
 	if (NULL == pgpio_detect){
@@ -123,6 +157,31 @@ static int __init gpio_detect_probe(struct platform_device *pdev)
 	ret = device_create_file(&(pdev->dev), &dev_attr_pc29_value);
 	if (ret != 0){
 		printk(KERN_INFO "device pc29 value create failed\n");
+		goto err;
+	}
+
+	gpio	= pgpio_detect->pc28;
+	name		= "gpio detect - pc28";
+
+	if (!gpio_is_valid(gpio)) {
+		printk(KERN_INFO "unavailable gpio %d (%s)\n", gpio, name);
+		return 0;
+	}
+
+	ret = gpio_request(gpio, name);
+	if (ret < 0){
+		printk(KERN_INFO "gpio %d (%s) request failed\n", gpio, name);
+		return ret;
+	}
+	P_DEBUG_SIMPLE("gpio %d (%s) request sucess\n", gpio, name);
+
+	ret = gpio_direction_input(gpio);
+	if (ret < 0)
+		goto err;
+		
+	ret = device_create_file(&(pdev->dev), &dev_attr_pc28_value);
+	if (ret != 0){
+		printk(KERN_INFO "device pc28 value create failed\n");
 		goto err;
 	}
 
